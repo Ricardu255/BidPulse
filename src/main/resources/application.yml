@@ -1,0 +1,201 @@
+server:
+  # 8080。若被占用可临时改端口，演示手册里的 curl 命令也要同步改
+  port: 8080
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+    accept-count: 200
+    max-connections: 8192
+
+spring:
+  application:
+    name: bidpulse
+
+  datasource:
+    # 本地演示环境不设密码，对应 docker-compose.yml 的 MYSQL_ALLOW_EMPTY_PASSWORD
+    #
+    # socketTimeout=3000：网络层保险丝。MySQL 驱动默认 0（无限等），一旦网络丢包/连接
+    #   卡死，客户端会一直挂在 read 上——此时 MAX_EXECUTION_TIME 帮不了（SQL 没到服务端），
+    #   MyBatis timeout 的取消也要另开连接发 KILL QUERY，同样发不出去。
+    #   语义是「两次网络读之间的静默上限」，对非流式查询等同于语句总时长上限。
+    #   取 3000 与 hikari.connection-timeout 对齐；比它更小的值会误伤后台报表/批量写。
+    # connectTimeout=3000：建连阶段的 TCP 超时（默认 0 时，对端丢包会等到系统默认 20s+）。
+    url: jdbc:mysql://127.0.0.1:3306/bidpulse?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&socketTimeout=3000&connectTimeout=3000
+    username: root
+    password:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: bidpulseHikari
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      validation-timeout: 2000
+      # 压测时打印的连接池指标来源
+      leak-detection-threshold: 5000
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      database: 0
+      # 预算扣减必须快，连接池适当放大
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 200ms
+      timeout: 200ms
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      # M6 启用。acks=all 配合幂等生产者，防止事件丢失与重复
+      acks: all
+      retries: 3
+      # 显式指定 String 序列化（key=adId 分区键，value=事件 JSON）
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+        batch.size: 32768
+        # send() 并非永不阻塞：broker 不可达 / topic 元数据拿不到 / 发送缓冲区满时，
+        # KafkaProducer 会在调用线程上最多等待 max.block.ms（默认 60s）才抛超时。
+        # 竞价事件是旁路，绝不能被它拖住 /bid 主线程，因此收紧到 100ms：
+        # 拿不到元数据就直接失败（由 publish 的异常处理记录），不影响竞价返回。
+        max.block.ms: 100
+    consumer:
+      # 不设全局 group-id：三个消费者都在 @KafkaListener 上显式指定了各自的 groupId
+      # （billing-recon / hourly-preagg / freq-antifraud），全局值不会被使用，
+      # 留着反而会让 broker 侧看起来存在一个叫 bidpulse 的消费组。
+      # 计费事件不可丢：新建消费组从最早位点开始，避免「组建立之前已产生的事件」被 latest 跳过。
+      # 已有提交位点的消费组不受影响，仍从上次位点继续。
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      # 消费端手动提交位点，保证至少一次投递
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 500
+    listener:
+      # 手动提交，配合幂等实现「至少一次 + 最终只生效一次」
+      ack-mode: manual_immediate
+
+mybatis:
+  configuration:
+    # 展示 SQL 执行耗时，定位瓶颈用
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    # 全局语句超时（秒）。单位是「秒」，3 = 3000ms。
+    # 竞价热路径 findCandidates 单独用 timeout="1" + MAX_EXECUTION_TIME(800) 收紧，不依赖这个全局值
+    default-statement-timeout: 3
+  mapper-locations: classpath:mapper/*.xml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: bidpulse
+  observations:
+    key-values:
+      application: bidpulse
+
+logging:
+  level:
+    root: INFO
+    com.bidpulse: INFO
+    # 压测时可临时把这里调到 DEBUG 看 SQL。
+    # MyBatis 的 Slf4jImpl 用 mapper 接口全限定名作 logger 名（com.bidpulse.infra.persistence.AdMapper）；
+    # com.bidpulse.mapper 这个包并不存在，写错了不会生效。
+    com.bidpulse.infra.persistence: INFO
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+bidpulse:
+  # 二价最小加价（元）：成交价 = min(胜出价, 次高价 + 该值)
+  min-increment: 0.01
+  # ===== M5 超时与熔断配置 =====
+  # 整条链路总超时预算（ms）：SLA 闸门，超过即放弃后续候选走兜底
+  # M9 去线程池后，各依赖的超时不再由这里控制，而是下沉到驱动/SQL 层：
+  #   · DB 候选检索：AdMapper.xml 的 MAX_EXECUTION_TIME(800) + timeout="1"
+  #   · Redis 计费：spring.data.redis.timeout: 200ms（Lettuce 命令超时）
+  timeout:
+    total-ms: 1000
+  bid:
+    # 单次竞价的候选上限（SQL LIMIT）。候选只服务于二价计算与 fall-through，
+    # 返回全部几百行没有意义，只会放大排序/网络/对象映射开销；
+    # 该值同时决定预算预热的最大规模。
+    candidate-limit: 50
+  circuit-breaker:
+    # 熔断实现：sentinel = 阿里 Sentinel「慢调用比例」熔断；local = 早期自写的连续失败计数实现。
+    # 两者阈值口径不同（一个是慢调用比例，一个是连续失败次数），切换后不能直接比"谁先开闸"，
+    # 只能在同一场故障演练里比"打开时刻 / 短路比例 / 自愈耗时"。
+    impl: sentinel
+    # 熔断持续时长（ms）。Sentinel 的 timeWindow 只接受「秒」，装载时按 1000 换算，只支持秒级精度。
+    cooldown-ms: 5000
+    # --- 以下仅 local 实现使用 ---
+    # 连续失败达到该值 → OPEN（后续请求短路兜底）
+    failure-threshold: 5
+    # --- 以下仅 Sentinel 实现使用（慢调用比例模式） ---
+    slow-ratio: 0.5
+    min-request-amount: 5
+    stat-interval-ms: 1000
+    # DB 候选检索「慢调用」判定阈值（ms）
+    # 压测实测：200ms 在 16 并发正常流量下就会误开闸（单条正常 40ms，并发抖动常破 200ms，
+    # 慢调用比例轻松越过 0.5），导致 96% 请求被短路走兜底 → 熔断变成"一压就废"。
+    # 故提到 800ms，与 MAX_EXECUTION_TIME 对齐：只把「真打满 SQL 超时」算作慢调用。
+    db-slow-rt-ms: 800
+    # Redis 预算扣减「慢调用」判定阈值（ms），须显著小于 spring.data.redis.timeout(200ms)
+    redis-slow-rt-ms: 100
+  fallback:
+    # 兜底总开关。生产语义下恒为 true：任何失败都必须收敛到兜底广告。
+    # 置 false 仅用于 A/B 对照实验——复现「没有兜底机制的旧实现」，
+    # 所有失败出口直接返回空广告（hasAd=false），用来测量改造前的空广告率。
+    enabled: true
+    # 强制兜底开关：true 时所有请求直接返回兜底广告，用于复现「依赖全面故障」
+    force: false
+    # 兜底广告本地缓存：正常 5s 刷新一次（运营改 Redis 最多延迟 5s 生效）；
+    # Redis 读取失败后退避 30s，期间直接返回缓存，避免 Redis 故障时每个兜底请求白等 200ms 命令超时
+    cache-ttl-ms: 5000
+    retry-backoff-ms: 30000
+  detail:
+    # M7 测量专用：true 时退化成同步单条 INSERT（模拟 M1 基线写入路径），
+    # 用于产出「写吞吐由 A 提升至 B」的 A 值。正常压测与演示必须保持 false。
+    sync-insert: false
+  kafka:
+    topic: bid_event
+    # 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig）
+    dlt-topic: bid_event.DLT
+    partitions: 3
+    # processed_event 去重表的保留期（天）。必须不短于 Kafka 的 retention.ms（默认 7 天），
+    # 否则 broker 重放历史消息时去重记录已被清掉，会重复计费/重复聚合。
+    processed-event-retention-days: 8
+    # 单次删除上限，避免一条大 DELETE 长时间锁表；批间让出，剩余部分继续循环
+    processed-event-cleanup-batch: 10000
+    # 单次调度最多删除的行数，避免维护窗口被一次清理占满（超出部分次日继续）
+    processed-event-cleanup-max-per-run: 1000000
+    # 每日 02:30 清理（cron：秒 分 时 日 月 周）
+    processed-event-cleanup-cron: "0 30 2 * * ?"
+  budget:
+    # 播种 key 的存活时长（秒），默认 2 天。预热与 Lua 惰性播种都会带上这个 TTL。
+    key-ttl-seconds: 172800
+    cleanup:
+      # 预算 key（budget:/spent:）按天分桶。播种时已带 TTL（SET ... EX），
+      # 这里再按日期主动扫尾，防止历史遗留的无 TTL key 或异常写入长期堆积
+      # （Redis noeviction 打满后写被拒 → 预算扣减失败）。
+      # 保留天数：保留「今天」往前共 N 天，清理更早的日期分桶（默认 2 = 保留今天+昨天，清掉前天及更早）
+      retention-days: 2
+      # 清理触发时间（cron：秒 分 时 日 月 周），默认每天 01:00
+      cron: "0 0 1 * * ?"
+    reset:
+      # 日预算复位（ad.status 3 -> 1）的触发时间。必须在 00:00 之后：
+      # 预算 key 按天分桶、跨天即恢复额度，DB 状态必须同步复位，否则广告永久退出投放。
+      cron: "0 5 0 * * ?"

@@ -1,0 +1,121 @@
+package com.bidpulse.api;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.stream.Collectors;
+
+/**
+ * 全局异常处理：把未捕获异常统一收敛为 {@link ApiResponse} 错误结构，
+ * 避免异常直接以 500 裸奔、返回体格式不统一。
+ *
+ * <ul>
+ *   <li>{@link BizException}（业务异常）→ 按其自带状态码（404 不存在 / 409 冲突 / 400 不合法）；</li>
+ *   <li>{@code BindException}（{@code @Valid} 校验失败）→ 400，聚合字段错误；</li>
+ *   <li>{@code HttpMessageNotReadableException}（请求体缺失 / 非法 JSON）→ 400；</li>
+ *   <li>{@code MissingServletRequestParameterException}（缺少 @RequestParam）→ 400；</li>
+ *   <li>{@code MethodArgumentTypeMismatchException}（参数类型不匹配，如 ?group= 传数字）→ 400；</li>
+ *   <li>{@code HttpRequestMethodNotSupportedException}（如用 GET 调 POST 接口）→ 405；</li>
+ *   <li>{@code NoResourceFoundException}（未知路径 / 静态资源不存在）→ 404；</li>
+ *   <li>{@code HttpMediaTypeNotSupportedException}（Content-Type 不支持）→ 415；</li>
+ *   <li>{@code HttpMediaTypeNotAcceptableException}（Accept 无法满足）→ 406；</li>
+ *   <li>其他未处理异常 → 500（不泄漏内部细节）。</li>
+ * </ul>
+ *
+ * <p><b>为什么校验失败统一用 {@code BindException} 而不是
+ * {@code MethodArgumentNotValidException}</b>：后者是前者的子类，只在
+ * {@code @RequestBody @Valid} 场景抛出；而查询参数/表单绑定校验（{@code @ModelAttribute @Valid}，
+ * 如 {@code GET /admin/ad?status=9}）抛的是父类 {@code BindException} 本身。
+ * 用父类声明一个 handler 即可同时覆盖两种场景，规则只写一份。
+ *
+ * <p>这些"框架异常"分支必须显式声明：{@code @ExceptionHandler} 的优先级高于 Spring 默认的
+ * {@code DefaultHandlerExceptionResolver}，若只留一个 {@code Exception} 兜底，会把框架本该
+ * 返回的 400/405 一并吞成 500。
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BizException.class)
+    public ResponseEntity<ApiResponse<Void>> onBiz(BizException e) {
+        return ResponseEntity.status(e.getStatus())
+                .body(ApiResponse.error(e.getStatus(), e.getMessage()));
+    }
+
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiResponse<Void>> onValidation(BindException e) {
+        String msg = e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + " " + fe.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), msg));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> onUnreadable(HttpMessageNotReadableException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "请求体缺失或格式非法"));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> onMissingParam(MissingServletRequestParameterException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(),
+                        "缺少必要参数 " + e.getParameterName()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> onTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(),
+                        "参数 " + e.getName() + " 类型非法"));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> onMethodNotSupported(HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ApiResponse.error(HttpStatus.METHOD_NOT_ALLOWED.value(),
+                        "不支持的请求方法 " + e.getMethod()));
+    }
+
+    /** 未知路径：Spring Boot 3.2 起会抛 NoResourceFoundException，不显式处理会被 500 兜底吞掉 */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> onNoResource(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(HttpStatus.NOT_FOUND.value(),
+                        "接口不存在: " + e.getResourcePath()));
+    }
+
+    /** Content-Type 不支持（如向 /bid 发 text/plain）：框架异常，应返回 415 而非 500 */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> onMediaTypeUnsupported(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                .body(ApiResponse.error(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value(),
+                        "不支持的 Content-Type: " + e.getContentType()));
+    }
+
+    /** Accept 无法满足：应返回 406 而非 500 */
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    public ResponseEntity<ApiResponse<Void>> onMediaTypeNotAcceptable(HttpMediaTypeNotAcceptableException e) {
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+                .body(ApiResponse.error(HttpStatus.NOT_ACCEPTABLE.value(), "无法生成客户端可接受的响应类型"));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> onError(Exception e) {
+        log.error("未处理异常: {}", e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error(HttpStatus.INTERNAL_SERVER_ERROR.value(), "服务内部错误"));
+    }
+}

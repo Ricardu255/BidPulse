@@ -1,0 +1,219 @@
+package com.bidpulse.infra.buffer;
+
+import com.bidpulse.entity.BidLog;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.InitializingBean;
+import com.bidpulse.config.BidPulseProperties;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * M7 · 竞价明细异步落库缓冲。
+ *
+ * <p><b>职责</b>：承接主链路 {@code /bid} 在 return 前 enqueue 的 {@link BidLog}，
+ * 由一条常驻后台线程攒批（{@code BATCH_SIZE} 条或 {@code FLUSH_MS} 毫秒触发其一）后
+ * 批量 INSERT 进 {@code bid_log}。
+ *
+ * <p><b>为什么不用同步单条 INSERT</b>：M1 基线每条竞价都同步写一行，写入延迟直接计入链路；
+ * 明细属于「可丢、可采样」数据（见《数据库设计说明》§四），没必要为它阻塞主链路。
+ * 改成内存队列 + 批量刷盘后，主链路只做一次 {@code offer()}（µs 级），写入吞吐由后台线程决定。
+ *
+ * <p><b>队列满的处理</b>：用 {@link ArrayBlockingQueue}（有界），容量 {@code QUEUE_CAP}。
+ * 队列满时 {@code offer()} 返回 false，直接丢弃这条明细（可采样），<b>绝不阻塞、绝不抛异常</b>。
+ * 兜底 / 空广告这类低价值明细本就是最先可丢的；正常负载（数十 QPS）下队列几乎不会满。
+ *
+ * <p><b>与 billing_event 的分级</b>：计费事件走 Kafka（不可丢），竞价明细走本地队列（可丢）。
+ * 同一份数据按「丢了有没有业务后果」分两条不同的管道，这是本项目最核心的设计取舍。
+ */
+@Slf4j
+@Component
+public class BidDetailBuffer implements InitializingBean, DisposableBean {
+
+    /** 队列容量：有界，防止流量尖峰把内存打爆 */
+    private static final int QUEUE_CAP = 10_000;
+    /** 攒够这么多条就触发一次批量刷盘 */
+    private static final int BATCH_SIZE = 500;
+    /** 或最多等这么久（毫秒）也触发一次刷盘，避免低流量时尾部明细迟迟不落库 */
+    private static final long FLUSH_MS = 200;
+
+    private final JdbcTemplate jdbc;
+
+    /** 统一配置（同步写入测量开关等），不再散落 @Value */
+    private final BidPulseProperties props;
+
+
+    private final ArrayBlockingQueue<BidLog> queue = new ArrayBlockingQueue<>(QUEUE_CAP);
+    private final Thread flusher;
+
+    private volatile boolean running = true;
+    private final AtomicLong dropped = new AtomicLong(0);
+    private final AtomicLong flushed = new AtomicLong(0);
+
+    /**
+     * 批量写入 SQL。
+     *
+     * <p>用 {@code INSERT IGNORE} 而不是普通 INSERT：{@code bid_log} 上有 {@code uk_request}，
+     * 一条重复的 request_id 会让 MySQL 拒绝整条多值语句，把「丢一条」放大成「丢一批 500 条」。
+     * IGNORE 让重复行单独跳过，其余照常落库。
+     */
+    private static final String SQL =
+            "INSERT IGNORE INTO bid_log (request_id, ad_id, advertiser_id, slot_code, region, age, gender, interests, "
+                    + "candidate_cnt, match_cnt, has_ad, win_bid, pay_price, "
+                    + "cost_ms, candidate_cost, filter_cost, sort_cost, bill_cost, bid_at) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+
+    public BidDetailBuffer(JdbcTemplate jdbc, BidPulseProperties props) {
+        this.jdbc = jdbc;
+        this.props = props;
+        this.flusher = new Thread(this::loop, "bid-detail-flusher");
+        this.flusher.setDaemon(true);
+    }
+
+    @Override
+    public void afterPropertiesSet() {
+        this.flusher.start();
+    }
+
+    @Override
+    public void destroy() {
+        running = false;
+        flusher.interrupt();
+        // 退出前尽力把残余明细刷完（最多分批刷）
+        while (!queue.isEmpty()) {
+            drainUpTo(BATCH_SIZE);
+        }
+    }
+
+    /**
+     * 主链路调用：入队一条竞价明细。队列满则丢弃（可采样），恒不阻塞主链路。
+     * 当 {@code bidpulse.detail.sync-insert=true}（仅测量用）退化为同步单条 INSERT，模拟 M1 基线写入路径。
+     */
+    public void enqueue(BidLog detail) {
+        if (props.getDetail().isSyncInsert()) {
+            // 测量专用：单条同步落库，写入延迟直接计入主链路（即 M1 基线行为，作「优化前 A」）
+            try {
+                jdbc.update(SQL, (Object[]) toParams(detail));
+            } catch (Exception e) {
+                log.warn("sync-insert 单条落 bid_log 失败（忽略）: {}", e.getMessage());
+            }
+            return;
+        }
+        if (!queue.offer(detail)) {
+            long d = dropped.incrementAndGet();
+            if (d % 1000 == 1) {
+                log.warn("bid_log 队列已满(容量{})，丢弃可采样明细，累计 dropped={}", QUEUE_CAP, d);
+            }
+        }
+    }
+
+    /** 暴露给 Actuator / 脚本观测的计数 */
+    public long droppedTotal() {
+        return dropped.get();
+    }
+
+    public long flushedTotal() {
+        return flushed.get();
+    }
+
+    /**
+     * 后台刷盘线程主循环（Design B：攒批上限 + 停留预算 linger）。
+     * 取到第一条后进入「攒批窗口」：尽量凑满 BATCH_SIZE 条，但自第一条起总停留不超过 FLUSH_MS，
+     * 二者先到者触发 flush。高流量下每批打满 500（fsync 摊到最薄），低流量下明细最多延迟 FLUSH_MS 即落库。
+     */
+    private void loop() {
+        List<BidLog> batch = new ArrayList<>(BATCH_SIZE);    // 复用的批次容器，避免每轮 new
+        while (running) {                                   // 未收到停止信号就持续循环
+            try {                                           // 包住循环体，单批异常不让线程退出
+                // 1) 空闲等待第一条：最多 FLUSH_MS 没数据则刷残余并继续等（空闲心跳）
+                BidLog first = queue.poll(FLUSH_MS, TimeUnit.MILLISECONDS);
+                if (first == null) {                        // 空闲超时：队列空了 FLUSH_MS
+                    if (!batch.isEmpty()) {                 // 防御性：把上一轮残留（正常不会进这里）刷掉
+                        flush(batch);
+                        batch.clear();
+                    }
+                    continue;                               // 回到循环开头继续等第一条
+                }
+                batch.add(first);                           // 第一条入批，攒批窗口启动
+
+                // 2) 先把当前队列里立即可用的尽量捞过来（突发流量下直接凑满 500）
+                queue.drainTo(batch, BATCH_SIZE - batch.size());
+                if (batch.size() >= BATCH_SIZE) {           // 已打满上限，无需再等
+                    flush(batch);
+                    batch.clear();
+                    continue;
+                }
+
+                // 3) 没满：进入 linger 窗口，在剩余预算内继续等数据顶满批次。
+                //    以 FLUSH_MS 作为「自第一条起算」的总停留预算，而非每条都等 FLUSH_MS
+                //    （否则低流量会无限拖延——每来一条就把等待再续 200ms）。
+                long deadline = System.nanoTime() + FLUSH_MS * 1_000_000L;
+                while (batch.size() < BATCH_SIZE) {         // 还没凑满就继续等
+                    long remain = deadline - System.nanoTime();
+                    if (remain <= 0) break;                 // 停留预算耗尽，带着当前这批走
+                    BidLog next = queue.poll(remain, TimeUnit.NANOSECONDS);
+                    if (next == null) break;                // 预算内再无数据，停止攒批
+                    batch.add(next);
+                }
+                flush(batch);                               // 满 500 或预算耗尽 → 批量落库
+                batch.clear();
+            } catch (InterruptedException ie) {             // 捕获中断（destroy 调了 flusher.interrupt()）
+                Thread.currentThread().interrupt();         // 重设中断标志，遵守 Java 中断语义
+                break;                                      // 跳出 while(running)，进入退出前残余刷盘
+            } catch (Exception e) {                         // 捕获其他任何异常（如写库失败）
+                log.error("bid-detail-flusher 异常: {}", e.getMessage()); // 仅记日志，不退出循环
+                batch.clear();                              // 本批清空，避免坏数据反复刷导致卡死
+            }
+        }
+        // 线程退出（running=false 或被中断）：把残余明细全部刷完
+        if (!batch.isEmpty()) {                             // 循环内最后一次可能还攒着一批
+            flush(batch);
+            batch.clear();
+        }
+        while (!queue.isEmpty()) {                          // 队列里仍有的没刷的明细
+            drainUpTo(BATCH_SIZE);                          // 分批全部刷完，关闭时不丢缓冲尾数据
+        }
+    }
+
+    /** 从队列取出至多 max 条并批量落库 */
+    private void drainUpTo(int max) {
+        List<BidLog> batch = new ArrayList<>(max);
+        queue.drainTo(batch, max);
+        if (!batch.isEmpty()) {
+            flush(batch);
+        }
+    }
+
+    private void flush(List<BidLog> batch) {
+        int n = batch.size();
+        List<Object[]> params = new ArrayList<>(n);
+        for (BidLog l : batch) {
+            params.add(toParams(l));
+        }
+        try {
+            jdbc.batchUpdate(SQL, params);
+            flushed.addAndGet(n);
+        } catch (Exception e) {
+            // 落库失败：丢弃本批（明细可丢），记录但不影响主链路
+            log.error("批量落 bid_log 失败（丢弃本批 {} 条）: {}", n, e.getMessage());
+        }
+    }
+
+    /** 单条明细 → INSERT 参数数组（同步单条与批量刷盘共用） */
+    private Object[] toParams(BidLog l) {
+        return new Object[]{
+                l.getRequestId(), l.getAdId(), l.getAdvertiserId(), l.getSlotCode(),
+                l.getRegion(), l.getAge(), l.getGender(), l.getInterests(),
+                l.getCandidateCnt(), l.getMatchCnt(), l.getHasAd(),
+                l.getWinBid(), l.getPayPrice(),
+                l.getCostMs(), l.getCandidateCost(), l.getFilterCost(), l.getSortCost(), l.getBillCost(),
+                l.getBidAt()
+        };
+    }
+}

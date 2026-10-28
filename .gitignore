@@ -1,0 +1,22 @@
+# 忽略所有文件夹
+/*/
+
+# 但是下面这几个文件夹，不要忽略（保留纳入git）
+!/sql/
+!/src/
+!/tools/
+# .github 必须放行，否则 CI workflow（ci.yml）推不上 GitHub、永不触发
+!/.github/
+
+# 编译产物：必须忽略。旧配置里写成 !/target/ 把 .class 全部放行进了仓库
+/target/
+
+# 本地文档与图片，不上传
+数据库设计说明.md
+项目知识文档.md
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.bmp
