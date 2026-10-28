@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.bidpulse.infra.persistence.AdMapper">
+
+  <!--
+    M1 候选检索：ad 全表扫 + ad_target 多维 JOIN
+    ==============================================
+    预期执行计划（建 all-schema.sql 后）：
+      ad             type: ALL  | key: NULL        刻意保留，baseline 的「慢」在这
+      t1/t2/t3       type: ref  | key: idx_dim_lookup
+
+    为什么 ad 不建索引：
+      候选集要小（100~200 条）就得有多维定向条件，
+      而检索要足够慢才能让 M2 有对照价值。
+      分工解决：ad 承担「慢」，ad_target 承担「筛得准」。
+
+    为什么用 <if> 拼 JOIN 而不用别的写法：
+      语义直白，便于逐段说明「哪一段是 M2 要换掉的」。
+  -->
+  <!--
+    M9：竞价热路径的超时下沉到 SQL 层（取消应用级线程池），两道闸门：
+      1) SELECT /*+ MAX_EXECUTION_TIME(800) */ —— MySQL 服务端毫秒级中断，仅作用于本 SELECT；
+         超时返回 error 3024，JDBC 抛 SQLException，BidService 记为一次 DB 失败 → 喂熔断。
+      2) timeout="1" —— MyBatis 客户端秒级保险丝（单位是秒，最小 1s，无法表达 800ms）。
+    其它 SQL 不受影响，仍走 mybatis.configuration.default-statement-timeout（3s）。
+  -->
+  <select id="findCandidates" timeout="1" resultType="com.bidpulse.entity.Ad">
+    SELECT /*+ MAX_EXECUTION_TIME(800) */ a.id, a.advertiser_id, a.title, a.creative_url, a.category_code,
+           a.bid, a.daily_budget, a.status, a.created_at, a.updated_at
+    FROM ad a
+    <if test="region != null">
+      JOIN ad_target t1 ON t1.ad_id = a.id AND t1.dim_type = 1 AND t1.dim_value = #{region}
+    </if>
+    <if test="ageBucket != null">
+      JOIN ad_target t2 ON t2.ad_id = a.id AND t2.dim_type = 2 AND t2.dim_value = #{ageBucket}
+    </if>
+    <if test="gender != null">
+      JOIN ad_target t3 ON t3.ad_id = a.id AND t3.dim_type = 3 AND t3.dim_value = #{gender}
+    </if>
+    WHERE a.status = 1
+    <if test="categoryCode != null">
+      AND a.category_code = #{categoryCode}
+    </if>
+    ORDER BY a.bid DESC
+    LIMIT #{limit}
+  </select>
+
+  <!-- =====================================================================
+       管理端 CRUD（/admin/ad）
+       =====================================================================
+       与上面的检索路径隔离，不参与竞价，不改变 findCandidates 的执行计划。
+
+       索引现状：
+         · ad.idx_adv(advertiser_id)：selectPage / countBy 按广告主过滤走二级索引；
+           InnoDB 二级索引隐含主键，ORDER BY id DESC 可反向扫描，无需 filesort
+         · ad_target.uk_ad_dim(ad_id, dim_type, dim_value)：详情/删除按 ad_id 走唯一键前缀
+
+       LIKE 说明：用 CONCAT + #{} 参数化，无注入风险；但用户输入里的 % 与 _
+       仍会被当作通配符（语义偏差，非安全问题），管理端搜索场景可接受。
+       ===================================================================== -->
+
+  <sql id="adFilter">
+    <where>
+      <if test="q.advertiserId != null">
+        AND advertiser_id = #{q.advertiserId}
+      </if>
+      <if test="q.status != null">
+        AND status = #{q.status}
+      </if>
+      <if test="q.titleLike != null and q.titleLike != ''">
+        AND title LIKE CONCAT('%', #{q.titleLike}, '%')
+      </if>
+    </where>
+  </sql>
+
+  <select id="selectById" resultType="com.bidpulse.entity.Ad">
+    SELECT id, advertiser_id, title, creative_url, category_code,
+           bid, daily_budget, status, created_at, updated_at
+    FROM ad
+    WHERE id = #{id}
+  </select>
+
+  <select id="countBy" resultType="long">
+    SELECT COUNT(*) FROM ad
+    <include refid="adFilter"/>
+  </select>
+
+  <select id="selectPage" resultType="com.bidpulse.entity.Ad">
+    SELECT id, advertiser_id, title, creative_url, category_code,
+           bid, daily_budget, status, created_at, updated_at
+    FROM ad
+    <include refid="adFilter"/>
+    ORDER BY id DESC
+    LIMIT #{q.limit} OFFSET #{q.offset}
+  </select>
+
+  <!-- 自增主键回填到 ad.id，service 拿到后直接用于写 ad_target -->
+  <insert id="insertAd" parameterType="com.bidpulse.entity.Ad"
+          useGeneratedKeys="true" keyProperty="id">
+    INSERT INTO ad (advertiser_id, title, creative_url, category_code, bid, daily_budget, status)
+    VALUES (#{advertiserId}, #{title}, #{creativeUrl}, #{categoryCode}, #{bid}, #{dailyBudget}, #{status})
+  </insert>
+
+  <!-- 局部更新：null 字段不参与 SET；updated_at 由 DB 的 ON UPDATE 维护。
+       注意：对外 PUT /admin/ad/{id} 要求全量字段（DTO 校验），这里保留 null 不 SET
+       只是内部实现的保险，不代表对外提供局部更新语义。 -->
+  <update id="updateAd" parameterType="com.bidpulse.entity.Ad">
+    UPDATE ad
+    <set>
+      <if test="title != null">title = #{title},</if>
+      <if test="creativeUrl != null">creative_url = #{creativeUrl},</if>
+      <if test="categoryCode != null">category_code = #{categoryCode},</if>
+      <if test="bid != null">bid = #{bid},</if>
+      <if test="dailyBudget != null">daily_budget = #{dailyBudget},</if>
+      <if test="status != null">status = #{status},</if>
+    </set>
+    WHERE id = #{id}
+  </update>
+
+  <delete id="deleteAd">
+    DELETE FROM ad WHERE id = #{id}
+  </delete>
+
+  <!-- 目标状态只接受 1(在投)/2(暂停)，由 service 层校验。
+       这里不加 status IN (1,2) 的过滤：也为「把系统标记的 3(已耗尽) 改回 1」留出通路。
+       但仅改状态不足以恢复投放——Redis 的 spent 计数仍为满，下一轮扣减会立刻重新标记为 3。 -->
+  <update id="updateStatus">
+    UPDATE ad SET status = #{status}
+    WHERE id = #{id}
+  </update>
+
+  <select id="listTargetsByAdId" resultType="java.util.LinkedHashMap">
+    SELECT dim_type AS dimType, dim_value AS dimValue
+    FROM ad_target
+    WHERE ad_id = #{adId}
+    ORDER BY dim_type, dim_value
+  </select>
+
+  <!-- 单条 INSERT 拼多组 VALUES，避免 N 次网络往返 -->
+  <insert id="batchInsertTargets">
+    INSERT INTO ad_target (ad_id, dim_type, dim_value) VALUES
+    <foreach collection="targets" item="t" separator=",">
+      (#{adId}, #{t.dimType}, #{t.dimValue})
+    </foreach>
+  </insert>
+
+  <delete id="deleteTargetsByAdId">
+    DELETE FROM ad_target WHERE ad_id = #{adId}
+  </delete>
+
+</mapper>
