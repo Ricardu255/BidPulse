@@ -50,6 +50,15 @@ public class BidRequest {
     private String categoryCode;
 
     /**
+     * 用户标识（可选），用于实时频次控制。
+     *
+     * <p>不传时不做频次限制：匿名流量没有稳定的用户维度，按 IP / 设备号拼一个伪 ID
+     * 更容易误伤（NAT 后的大量用户共享出口 IP）。由流量方在登录态或设备态下传入。
+     */
+    @Size(max = 64, message = "长度不能超过 64")
+    private String userId;
+
+    /**
      * 竞价结果详情，演示时展示给用户看。
      * M9 才会被前端真正用起来，M1 先在接口返回里带着，便于冒烟时肉眼核对。
      */

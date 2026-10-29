@@ -35,6 +35,7 @@ public class BidPulseProperties {
     private Detail detail = new Detail();
     private Kafka kafka = new Kafka();
     private Budget budget = new Budget();
+    private Frequency frequency = new Frequency();
 
     @Data
     public static class Timeout {
@@ -99,6 +100,30 @@ public class BidPulseProperties {
         /** 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig） */
         private String dltTopic = "bid_event.DLT";
         private int partitions = 3;
+
+        // ---- 消费端重试：指数退避，尽量在进入 DLT 前吸收瞬时 DB 抖动 ----
+        /** 首次重试间隔（ms） */
+        private long retryInitialMs = 1000;
+        /** 退避倍数 */
+        private double retryMultiplier = 2.0;
+        /** 单次重试间隔上限（ms） */
+        private long retryMaxMs = 16000;
+        /** 最大重试次数；默认 1s→2s→4s→8s→16s，总窗口约 31s */
+        private int retryMaxAttempts = 5;
+
+        // ---- DLT 重放：把重试耗尽的事件延迟重新投回主主题 ----
+        /** 是否启用 DLT 重放任务 */
+        private boolean dltReplayEnabled = true;
+        /** 重放任务 cron，默认每 5 分钟 */
+        private String dltReplayCron = "0 */5 * * * ?";
+        /** 单次最多处理的消息数，避免一次调度占用过久 */
+        private int dltReplayMaxRecords = 1000;
+        /** 单次调度最长运行时长（ms） */
+        private long dltReplayMaxDurationMs = 10000;
+        /** 同一事件最多重放次数；超过后留在 DLT 等待人工处理 */
+        private int dltReplayMaxAttempts = 3;
+        /** 重放投递主主题的同步等待超时（ms）；超时则不提交 DLT 位点，下次重试 */
+        private long dltReplaySendTimeoutMs = 5000;
         /** processed_event 保留天数：必须不短于 Kafka 消息保留期，否则重放时去重失效 */
         private int processedEventRetentionDays = 8;
         /** 单次清理最多删除行数，避免长事务与长时间锁表 */
@@ -115,6 +140,7 @@ public class BidPulseProperties {
         private long keyTtlSeconds = 172800;
         private Cleanup cleanup = new Cleanup();
         private Reset reset = new Reset();
+        private Recon recon = new Recon();
 
         @Data
         public static class Cleanup {
@@ -128,5 +154,40 @@ public class BidPulseProperties {
             /** 日预算复位（status 3 -> 1）的触发时间 */
             private String cron = "0 5 0 * * ?";
         }
+
+        @Data
+        public static class Recon {
+            /** 是否启用预算对账任务 */
+            private boolean enabled = true;
+            /** 对账 cron，默认每小时第 15 分钟 */
+            private String cron = "0 15 * * * ?";
+            /** 允许的误差（分）：Redis 与 DB 账单差值不超过该值视为正常（事件在途） */
+            private long toleranceCents = 1;
+            /** 单批处理的广告数，控制 IN 查询与 Redis 读取规模 */
+            private int batchSize = 500;
+        }
+    }
+
+    /**
+     * 实时频次控制。
+     *
+     * <p>按 (userId, adId) 的自然小时固定窗口计数：同一用户对同一广告每小时最多成交
+     * {@code maxPerHour} 次。计数键 {@code freq:u:{userId}:{yyyyMMddHH}} 是 Hash，
+     * field 为 adId，一次 {@code HINCRBY} 只影响当前广告。
+     *
+     * <p>关闭后不读写任何频次 key，热路径与未引入该功能时完全一致。
+     */
+    @Data
+    public static class Frequency {
+        private boolean enabled = true;
+        /** 同一用户对同一广告每小时的最大成交次数 */
+        private int maxPerHour = 3;
+        /**
+         * 频次 key 的 TTL（秒），默认 2 小时。
+         *
+         * <p>固定窗口键按小时命名，旧窗口不会再被读取；TTL 只负责回收。
+         * 取 2 小时给跨小时边界留出冗余，避免窗口末尾写入的键过早消失。
+         */
+        private long keyTtlSeconds = 7200;
     }
 }

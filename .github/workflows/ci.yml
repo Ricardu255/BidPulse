@@ -86,4 +86,5 @@ jobs:
         run: mysql -h 127.0.0.1 -uroot bidpulse < sql/all-schema.sql
 
       - name: Run tests
-        run: mvn -B test
+        # -Pfull-tests：CI 有 services，跑全量（含 @Tag("integration")）
+        run: mvn -B test -Pfull-tests

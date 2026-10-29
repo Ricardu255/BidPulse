@@ -52,4 +52,33 @@ class PricingPolicyTest {
         assertThrows(NullPointerException.class,
                 () -> PricingPolicy.secondPrice(yuan("1.00"), yuan("0.50"), null));
     }
+
+    @Test
+    @DisplayName("有效出价：预算充足时就是出价")
+    void effectiveBid_capsAtBidWhenBudgetSufficient() {
+        assertAmount("0.50", PricingPolicy.effectiveBid(yuan("0.50"), yuan("100.00")));
+    }
+
+    @Test
+    @DisplayName("有效出价：预算不足时降到剩余预算（价格连续，不再整条跳过）")
+    void effectiveBid_capsAtRemainingBudget() {
+        assertAmount("0.01", PricingPolicy.effectiveBid(yuan("0.10"), yuan("0.01")));
+        assertAmount("0.90", PricingPolicy.effectiveBid(yuan("1.00"), yuan("0.90")));
+    }
+
+    @Test
+    @DisplayName("有效出价：余额 <= 0 时钳到 0，不产生负价格")
+    void effectiveBid_neverNegative() {
+        assertAmount("0", PricingPolicy.effectiveBid(yuan("0.50"), yuan("0")));
+        assertAmount("0", PricingPolicy.effectiveBid(yuan("0.50"), yuan("-1.00")));
+    }
+
+    @Test
+    @DisplayName("有效出价：null 入参直接拒绝")
+    void effectiveBid_rejectsNull() {
+        assertThrows(NullPointerException.class,
+                () -> PricingPolicy.effectiveBid(null, yuan("1.00")));
+        assertThrows(NullPointerException.class,
+                () -> PricingPolicy.effectiveBid(yuan("1.00"), null));
+    }
 }

@@ -10,10 +10,9 @@ import lombok.Data;
  * <p><b>主入口是 advertiserId</b>：管理后台是「广告商登录后看自己的广告」，
  * 所以按广告主筛选是最高频的查询；status 用于在列表里切换「在投 / 暂停 / 已耗尽」页签。
  *
- * <p><b>当前性能提示</b>：{@code ad} 表除主键外没有任何索引（M1 baseline 的刻意设计），
- * 所以按 advertiserId 查询目前是 50 万行全表扫 + filesort。
- * 后续补 {@code KEY idx_adv (advertiser_id)} 后，可借 InnoDB 二级索引自带主键的特性
- * 直接反向扫描满足 {@code ORDER BY id DESC}，无需额外排序。
+ * <p><b>索引</b>：{@code ad} 表已建 {@code idx_adv(advertiser_id)}，按广告主过滤走二级索引；
+ * InnoDB 二级索引隐含主键，{@code ORDER BY id DESC} 可直接反向扫描，无需 filesort。
+ * 该索引只服务管理端查询，竞价检索路径仍是全表扫 + JOIN（M1 baseline）。
  */
 @Data
 public class AdQuery {
