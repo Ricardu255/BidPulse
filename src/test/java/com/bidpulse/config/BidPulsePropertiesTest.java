@@ -38,7 +38,10 @@ class BidPulsePropertiesTest {
                         "bidpulse.kafka.processed-event-retention-days=3",
                         "bidpulse.budget.key-ttl-seconds=3600",
                         "bidpulse.budget.cleanup.retention-days=5",
-                        "bidpulse.budget.reset.cron=0 3 0 * * ?")
+                        "bidpulse.budget.reset.cron=0 3 0 * * ?",
+                        "bidpulse.frequency.enabled=false",
+                        "bidpulse.frequency.max-per-hour=7",
+                        "bidpulse.frequency.key-ttl-seconds=900")
                 .run(ctx -> {
                     BidPulseProperties p = ctx.getBean(BidPulseProperties.class);
                     assertEquals(0, new BigDecimal("0.02").compareTo(p.getMinIncrement()));
@@ -54,6 +57,9 @@ class BidPulsePropertiesTest {
                     assertEquals(3600, p.getBudget().getKeyTtlSeconds());
                     assertEquals(5, p.getBudget().getCleanup().getRetentionDays());
                     assertEquals("0 3 0 * * ?", p.getBudget().getReset().getCron());
+                    assertEquals(false, p.getFrequency().isEnabled());
+                    assertEquals(7, p.getFrequency().getMaxPerHour());
+                    assertEquals(900, p.getFrequency().getKeyTtlSeconds());
                 });
     }
 
@@ -74,6 +80,9 @@ class BidPulsePropertiesTest {
             assertEquals("bid_event.DLT", p.getKafka().getDltTopic());
             assertEquals(8, p.getKafka().getProcessedEventRetentionDays());
             assertEquals(2, p.getBudget().getCleanup().getRetentionDays());
+            assertEquals(true, p.getFrequency().isEnabled());
+            assertEquals(3, p.getFrequency().getMaxPerHour());
+            assertEquals(7200, p.getFrequency().getKeyTtlSeconds());
         });
     }
 }

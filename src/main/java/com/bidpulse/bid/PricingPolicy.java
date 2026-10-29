@@ -33,4 +33,21 @@ public final class PricingPolicy {
         Objects.requireNonNull(minIncrement, "minIncrement");
         return nextBid.add(minIncrement).min(winnerBid);
     }
+
+    /**
+     * 计算一个候选在二价中的「有效出价」：{@code min(出价, 当日剩余预算)}。
+     *
+     * <p>为什么需要它：候选出价再高，当天预算不够也承接不了这次竞价。直接用出价参与二价
+     * 会把成交价抬到高于真实机会成本；而「付不起就整条跳过」又会让价格在预算边界上断崖。
+     * 用有效出价参与比较，价格随预算连续变化。
+     *
+     * @param bid       候选出价（元）
+     * @param remaining 当日剩余预算（元）
+     * @return 有效出价，恒在 {@code [0, bid]} 区间内
+     */
+    public static BigDecimal effectiveBid(BigDecimal bid, BigDecimal remaining) {
+        Objects.requireNonNull(bid, "bid");
+        Objects.requireNonNull(remaining, "remaining");
+        return bid.min(remaining.max(BigDecimal.ZERO));
+    }
 }

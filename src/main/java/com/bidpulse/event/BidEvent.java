@@ -34,6 +34,9 @@ public class BidEvent {
     /** 地域编码 */
     private String region;
 
+    /** 用户标识（可空）；用于频次分析，匿名流量为 null */
+    private String userId;
+
     /** 胜出广告 ID；兜底事件为兜底广告自身 id（如 999999），不会为 null */
     private Long adId;
 

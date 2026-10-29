@@ -12,8 +12,17 @@ spring:
   application:
     name: bidpulse
 
+  # 定时任务线程池：默认只有 1 个线程。DLT 重放单轮最长运行 dlt-replay-max-duration-ms(10s)，
+  # 预算对账要跑 DB 聚合，单线程会让它们互相排队（重放占着线程时清理/复位全部延后）。
+  task:
+    scheduling:
+      pool:
+        size: 4
+      thread-name-prefix: bidpulse-sched-
+
   datasource:
-    # 本地演示环境不设密码，对应 docker-compose.yml 的 MYSQL_ALLOW_EMPTY_PASSWORD
+    # 默认空密码对应 docker-compose.yml 的 MYSQL_ALLOW_EMPTY_PASSWORD；
+    # 本机 MySQL 有密码时用环境变量覆盖（如 MYSQL_PASSWORD=xxx），不把密码写进仓库。
     #
     # socketTimeout=3000：网络层保险丝。MySQL 驱动默认 0（无限等），一旦网络丢包/连接
     #   卡死，客户端会一直挂在 read 上——此时 MAX_EXECUTION_TIME 帮不了（SQL 没到服务端），
@@ -23,7 +32,7 @@ spring:
     # connectTimeout=3000：建连阶段的 TCP 超时（默认 0 时，对端丢包会等到系统默认 20s+）。
     url: jdbc:mysql://127.0.0.1:3306/bidpulse?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&socketTimeout=3000&connectTimeout=3000
     username: root
-    password:
+    password: ${MYSQL_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       pool-name: bidpulseHikari
@@ -175,6 +184,20 @@ bidpulse:
     # 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig）
     dlt-topic: bid_event.DLT
     partitions: 3
+    # 消费端指数退避：1s → 2s → 4s → 8s → 16s（总窗口约 31s）。
+    # 把瞬时 DB 抖动吸收在进入 DLT 之前；只有持续故障才落 DLT。
+    retry-initial-ms: 1000
+    retry-multiplier: 2.0
+    retry-max-ms: 16000
+    retry-max-attempts: 5
+    # DLT 重放：把重试耗尽的事件延迟重新投回主主题，由各消费组按 processed_event 幂等消费。
+    # 报文不可解析的事件不重放；同一事件最多重放 3 次，超过后留在 DLT 等人工处理。
+    dlt-replay-enabled: true
+    dlt-replay-cron: "0 */5 * * * ?"
+    dlt-replay-max-records: 1000
+    dlt-replay-max-duration-ms: 10000
+    dlt-replay-max-attempts: 3
+    dlt-replay-send-timeout-ms: 5000
     # processed_event 去重表的保留期（天）。必须不短于 Kafka 的 retention.ms（默认 7 天），
     # 否则 broker 重放历史消息时去重记录已被清掉，会重复计费/重复聚合。
     processed-event-retention-days: 8
@@ -199,3 +222,23 @@ bidpulse:
       # 日预算复位（ad.status 3 -> 1）的触发时间。必须在 00:00 之后：
       # 预算 key 按天分桶、跨天即恢复额度，DB 状态必须同步复位，否则广告永久退出投放。
       cron: "0 5 0 * * ?"
+    recon:
+      # 预算对账：对比 Redis spent 与 billing_event 当日汇总。
+      # Redis 高于账单 → 只告警（钱确实扣了，不能下调 spent）；
+      # Redis 低于账单 → 说明 key 丢失/被重置，按账单重算 Redis 并自动修复。
+      enabled: true
+      # 默认每小时第 15 分钟执行
+      cron: "0 15 * * * ?"
+      # 允许误差（分）：事件在途造成的短暂差值不告警
+      tolerance-cents: 1
+      # 单批处理的广告数，控制 IN 查询与 Redis 读取规模
+      batch-size: 500
+  frequency:
+    # 实时频次控制：按 (userId, adId) 的自然小时固定窗口计数。
+    # 检查与自增合并进预算扣减的同一个 Lua 脚本：不增加热路径 RTT；
+    # 频次被拦时直接跳过该候选，既不扣预算也不计数，更不会把广告标成「已耗尽」。
+    enabled: true
+    # 同一用户对同一广告每小时最多成交次数（固定窗口，整点重置）
+    max-per-hour: 3
+    # 频次 key 的 TTL（秒），默认 2 小时；旧小时窗口不再读取，TTL 只负责回收
+    key-ttl-seconds: 7200

@@ -75,12 +75,13 @@ public interface AdMapper {
     // 与上面的检索路径完全隔离：这些 SQL 不参与竞价，因此不会改变
     // findCandidates 的执行计划，也不影响 M1 baseline 的结论。
     //
-    // 【已知代价】ad 表除主键外无索引（M1 刻意设计）、ad_target 只有
-    // (dim_type, dim_value, ad_id) 联合索引（最左前缀用不上 ad_id），因此：
-    //   · countBy / selectPage  按 advertiser_id 查 → 全表扫 + filesort
-    //   · listTargetsByAdId / deleteTargetsByAdId  按 ad_id 查 → 全表扫 644 万行
-    // 索引留待后续单独补（建议 KEY idx_adv(advertiser_id) 与
-    // KEY idx_ad_dir(ad_id, dim_type)），补完需重新 EXPLAIN 复核检索计划未变。
+    // 索引现状（以 sql/all-schema.sql 为准，两处索引都已建好）：
+    //   · ad.idx_adv(advertiser_id)：countBy / selectPage 按广告主过滤走二级索引；
+    //     InnoDB 二级索引隐含主键，ORDER BY id DESC 可直接反向扫描，无需 filesort。
+    //   · ad_target.uk_ad_dim(ad_id, dim_type, dim_value)：详情 / 删除按 ad_id 走唯一键前缀。
+    // 为什么这些索引不影响「ad 在检索路径上全表扫 + filesort」的基线：
+    //   findCandidates 既不按 advertiser_id 过滤，也不按 id 排序（排的是 bid），
+    //   因此两个管理端索引都不会被检索 SQL 选中。
     // =====================================================================
 
     /** 按主键查广告，不存在返回 null */

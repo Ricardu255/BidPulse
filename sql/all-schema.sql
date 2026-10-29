@@ -35,6 +35,10 @@
 --       ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 --         COMMENT '首次处理时间，供保留期清理',
 --       ADD KEY idx_created (created_at);
+--     -- billing_event 按 (ad_id, ts) 汇总当日消耗（BudgetReconJob 对账 / 冷启动重建）
+--     -- 不建索引时每次对账都是全表扫描，账单表越大越慢。在线 DDL 不阻塞读写：
+--     ALTER TABLE billing_event ADD KEY idx_ad_ts (ad_id, ts),
+--                           ALGORITHM=INPLACE, LOCK=NONE;
 -- =====================================================================
 
 CREATE DATABASE IF NOT EXISTS bidpulse
@@ -145,7 +149,9 @@ CREATE TABLE billing_event (
   advertiser_id  INT         NULL COMMENT '广告主 ID，关联 ad.advertiser_id',
   pay_price      DECIMAL(12,4) NULL COMMENT '实际扣费',
   ts             BIGINT      NULL COMMENT '事件时间戳（毫秒）',
-  PRIMARY KEY (event_id)
+  PRIMARY KEY (event_id),
+  -- 对账与冷启动重建都按「某广告某日」汇总消耗；没有该索引只能全表扫描
+  KEY idx_ad_ts (ad_id, ts)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='M6 计费对账明细（消费端幂等落库）';
 
 -- ---------------------------------------------------------------------

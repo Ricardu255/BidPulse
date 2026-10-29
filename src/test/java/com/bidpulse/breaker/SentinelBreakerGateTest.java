@@ -64,12 +64,20 @@ class SentinelBreakerGateTest {
         SentinelBreakerGate gate = new SentinelBreakerGate(RES_SLOW);
         DegradeRuleManager.loadRules(List.of(slowCallRule(RES_SLOW)));
 
-        // 制造 2 次慢调用（60ms > 50ms 阈值）：满足最小请求数，且慢调用占比 100% > 50%
-        for (int i = 0; i < 2; i++) {
-            gate.call(() -> {
-                Thread.sleep(60);
-                return null;
-            });
+        // 制造慢调用（60ms > 50ms 阈值）：满足最小请求数，且慢调用占比 100% > 50%。
+        // 不写死「2 次」：Sentinel 的统计窗口（statIntervalMs=1000）是滚动的，机器抖动时
+        // 前两次调用可能落在窗口交界处被清掉，导致「还没打开」的偶发失败。
+        // 这里最多打 6 次（约 360ms，仍在同一窗口内），一旦打开就停。
+        boolean opened = false;
+        for (int i = 0; i < 6 && !opened; i++) {
+            try {
+                gate.call(() -> {
+                    Thread.sleep(60);
+                    return null;
+                });
+            } catch (BreakerOpenException alreadyOpen) {
+                opened = true;
+            }
         }
 
         // 熔断已打开：必须短路，且 action 一次都不能被执行

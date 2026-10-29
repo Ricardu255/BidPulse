@@ -109,8 +109,8 @@ public class AdAdminService {
      *   <li>非空 —— 全删重插，等价于「覆盖式替换」。</li>
      * </ul>
      * 全删重插而非增量 diff，是为了避免定向的增删改三种情况各写一套 SQL；
-     * 代价是 {@code DELETE FROM ad_target WHERE ad_id = ?} 在没有 ad_id 索引时全表扫，
-     * 这也是后续要补 {@code idx_ad_dir(ad_id, dim_type)} 的原因。
+     * {@code DELETE FROM ad_target WHERE ad_id = ?} 走
+     * {@code uk_ad_dim(ad_id, dim_type, dim_value)} 的最左前缀，不是全表扫。
      *
      * <p><b>日预算变更</b>：{@code dailyBudget} 与 DB 原值不同时，事务提交后会把新预算同步到当天
      * Redis（余额 = max(0, 新日预算 − 今日已消耗)）。否则 Redis 的预算 key 已存在，

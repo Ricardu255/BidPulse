@@ -20,6 +20,14 @@
   <properties>
     <java.version>17</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!--
+      集成测试分层：BidFlowTest / BudgetServiceTest 真连 MySQL + Redis + Kafka，
+      打 @Tag("integration")。默认 mvn test 只跑 8 个纯单测（29 个用例），没有中间件也能全绿；
+      跑全量用 profile（不要用 -Dsurefire.excludedGroups=...：Windows PowerShell 调 mvn.cmd 时
+      带点的 -D 参数会在第一个点处被拆开，Maven 会报 "Unknown lifecycle phase '.excludedGroups=none'"）：
+        mvn test -Pfull-tests
+    -->
+    <surefire.excludedGroups>integration</surefire.excludedGroups>
   </properties>
 
   <dependencies>
@@ -112,6 +120,15 @@
   <build>
     <plugins>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- 由 pom 属性驱动：默认排除 integration，-Pfull-tests 时置为 none（不排除任何 tag） -->
+          <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+        </configuration>
+      </plugin>
+
+      <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <configuration>
@@ -125,4 +142,21 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      全量测试（含 @Tag("integration") 的真连中间件用例）。
+      用 profile 而不是 -Dsurefire.excludedGroups=none：后者在 Windows 上由 PowerShell 调用
+      mvn.cmd 时会被拆成两个参数（-Dsurefire / .excludedGroups=none），Maven 直接报
+      "Unknown lifecycle phase"。
+        mvn test -Pfull-tests
+    -->
+    <profile>
+      <id>full-tests</id>
+      <properties>
+        <!-- "none" 不是任何测试的 tag，等价于不排除任何分组 -->
+        <surefire.excludedGroups>none</surefire.excludedGroups>
+      </properties>
+    </profile>
+  </profiles>
 </project>

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * 广告实体。
  *
  * <p>M1 阶段的检索方式：{@code WHERE status = 1 AND category_code = ?}，
- * <b>不建任何索引</b>，因此走全表扫描（EXPLAIN 应为 type=ALL、rows≈49万）。
+ * <b>检索路径上不建索引</b>，因此走全表扫描（EXPLAIN 应为 type=ALL、rows≈49万）。
  * 这是 M1 baseline 的前提，M2 才引入倒排索引。
  */
 @Data
