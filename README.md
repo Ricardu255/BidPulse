@@ -27,6 +27,7 @@
 - **可丢明细异步落库**：竞价明细走本地有界队列，500 条或 200ms 批量刷盘，队列满直接丢，绝不阻塞主链路。
 - **预算生命周期完整**：检索阶段预热 key、Lua 惰性播种、日预算复位、管理端改预算当天同步 Redis、历史 key 定时清理。
 - **可观测**：Actuator 健康检查、Metrics、Prometheus；消费组 lag 查询接口。
+- **演示控制台（前后端分离）**：独立 `console-ui/`（Vue 3 + Vite + Element Plus），通过 `/console-api/v1` 展示概览、竞价结果、广告投放、预算/频次状态与消费组 lag；后端不渲染页面。
 
 ---
 
@@ -41,6 +42,7 @@
 | 消息 | Kafka 3.7 单节点 KRaft | 计费事件旁路、三个消费组、死信主题 |
 | 熔断 | Sentinel 1.8.6（`sentinel-core`） | 慢调用比例熔断，可切回本地实现做 A/B |
 | 可观测 | Actuator + Micrometer + Prometheus | 健康检查与指标出口 |
+| 演示控制台 | Vue 3 · Vite · TypeScript · Element Plus | 前后端分离的演示 UI（`console-ui/`） |
 
 ---
 
@@ -143,6 +145,44 @@ curl -X POST http://127.0.0.1:8080/bid -H "Content-Type: application/json" \
 ```
 
 首次运行该示例会命中 2 个候选：`adId=110` 出价 1.50 胜出，次高价 1.00，成交价 `1.01`（`priceMode=1`）。
+
+### 6. 演示控制台（前后端分离）
+
+控制台源码在独立的 `console-ui/`，后端只提供 `/console-api/v1` REST 接口，不使用 Thymeleaf。
+
+开发态两个进程分别启动：
+
+```bash
+# 终端 1：后端（8080）
+mvn spring-boot:run
+
+# 终端 2：前端（5173，/console-api 代理到 8080）
+cd console-ui
+npm install
+npm run dev
+```
+
+打开 <http://localhost:5173/>。
+
+单 jar 演示时把前端产物构建到后端静态目录：
+
+```bash
+cd console-ui
+npm run build:embedded
+# 打开 http://localhost:8080/console/index.html
+```
+
+控制台默认开启，写操作（暂停/恢复消费）由配置控制：
+
+```yaml
+bidpulse:
+  console:
+    enabled: true
+    allow-write: true
+    allowed-origins: "http://localhost:5173"
+```
+
+P0/P1/P2 页面：概览、竞价实验室、广告与投放、预算与频次、Kafka 异步运维（含 DLT 浏览/重放、预算对账）。完整说明见 `console-ui/README.md`。
 
 ---
 
@@ -366,19 +406,19 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 8 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest' test
+# 等价于只跑下列 10 个类（@Tag("integration") 的用例默认被排除）
+mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest' test
 ```
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义，共 29 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约与只读查询边界，共 40 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 40 个纯单测，全量为 67 个（2026-10-31 已在本机三件套上跑通 67/67）：
 
 ```bash
 docker compose up -d

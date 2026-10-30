@@ -41,7 +41,9 @@ class BidPulsePropertiesTest {
                         "bidpulse.budget.reset.cron=0 3 0 * * ?",
                         "bidpulse.frequency.enabled=false",
                         "bidpulse.frequency.max-per-hour=7",
-                        "bidpulse.frequency.key-ttl-seconds=900")
+                        "bidpulse.frequency.key-ttl-seconds=900",
+                        "bidpulse.console.enabled=true",
+                        "bidpulse.console.allow-write=false")
                 .run(ctx -> {
                     BidPulseProperties p = ctx.getBean(BidPulseProperties.class);
                     assertEquals(0, new BigDecimal("0.02").compareTo(p.getMinIncrement()));
@@ -60,6 +62,8 @@ class BidPulsePropertiesTest {
                     assertEquals(false, p.getFrequency().isEnabled());
                     assertEquals(7, p.getFrequency().getMaxPerHour());
                     assertEquals(900, p.getFrequency().getKeyTtlSeconds());
+                    assertEquals(true, p.getConsole().isEnabled());
+                    assertEquals(false, p.getConsole().isAllowWrite());
                 });
     }
 
@@ -83,6 +87,8 @@ class BidPulsePropertiesTest {
             assertEquals(true, p.getFrequency().isEnabled());
             assertEquals(3, p.getFrequency().getMaxPerHour());
             assertEquals(7200, p.getFrequency().getKeyTtlSeconds());
+            assertEquals(false, p.getConsole().isEnabled());
+            assertEquals(false, p.getConsole().isAllowWrite());
         });
     }
 }

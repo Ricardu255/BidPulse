@@ -242,3 +242,12 @@ bidpulse:
     max-per-hour: 3
     # 频次 key 的 TTL（秒），默认 2 小时；旧小时窗口不再读取，TTL 只负责回收
     key-ttl-seconds: 7200
+  console:
+    # 本地演示控制台：只读查询 + 消费组暂停/恢复。
+    # 前端是独立的 console-ui/ 工程，这里只提供 REST 接口。
+    # 仅用于本地/演示环境；部署到非本地前必须加鉴权。
+    enabled: true
+    # 写操作开关：关闭后只保留查询，暂停/恢复接口返回 403
+    allow-write: true
+    # 前后端分开部署时允许的前端来源（逗号分隔）；开发态为 Vite 默认端口
+    allowed-origins: "http://localhost:5173"
