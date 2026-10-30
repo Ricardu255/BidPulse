@@ -14,7 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +50,21 @@ public class ConsoleAdsController {
     @GetMapping("/{id}")
     public ApiResponse<Map<String, Object>> detail(@PathVariable Long id) {
         return ApiResponse.ok(adAdminService.detail(id));
+    }
+
+    @PostMapping
+    public ApiResponse<Map<String, Object>> create(@Valid @RequestBody AdUpsertRequest req) {
+        requireWrite();
+        Long id = adAdminService.create(req);
+        return ApiResponse.ok(Map.of("id", id));
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<Map<String, Object>> update(@PathVariable Long id,
+                                                   @Valid @RequestBody AdUpsertRequest req) {
+        requireWrite();
+        adAdminService.update(id, req);
+        return ApiResponse.ok(Map.of("id", id, "updated", true));
     }
 
     @PutMapping("/{id}/status")

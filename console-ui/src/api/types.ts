@@ -121,6 +121,17 @@ export interface AdTarget {
   dimValue: string
 }
 
+export interface AdUpsertRequest {
+  advertiserId?: number
+  title: string
+  creativeUrl: string
+  categoryCode: string
+  bid: number
+  dailyBudget: number
+  status?: number
+  targets: AdTarget[]
+}
+
 export interface AdDetail {
   ad: AdView
   targets: AdTarget[]
@@ -167,6 +178,34 @@ export interface ReconReport {
   repaired: number
   durationMs: number
   message: string | null
+}
+
+export interface DataView {
+  table: string
+  columns: string[]
+  rows: Record<string, unknown>[]
+}
+
+export interface DataQueryParams {
+  limit: number
+  adId?: number
+  requestId?: string
+}
+
+export interface ExperimentsView {
+  fallbackEnabled: boolean
+  fallbackForce: boolean
+  frequencyEnabled: boolean
+  frequencyMaxPerHour: number
+  detailSyncInsert: boolean
+  consoleAllowWrite: boolean
+}
+
+export interface ExperimentsUpdate {
+  fallbackEnabled?: boolean
+  fallbackForce?: boolean
+  frequencyEnabled?: boolean
+  frequencyMaxPerHour?: number
 }
 
 export interface BurstRow {

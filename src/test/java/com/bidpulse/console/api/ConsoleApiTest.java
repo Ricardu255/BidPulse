@@ -3,6 +3,7 @@ package com.bidpulse.console.api;
 import com.bidpulse.admin.AdAdminService;
 import com.bidpulse.api.PageResult;
 import com.bidpulse.api.dto.AdQuery;
+import com.bidpulse.api.dto.AdUpsertRequest;
 import com.bidpulse.api.dto.BidRequest;
 import com.bidpulse.bid.BidService;
 import com.bidpulse.config.BidPulseProperties;
@@ -19,11 +20,13 @@ import com.bidpulse.infra.persistence.AdMapper;
 import com.bidpulse.job.BudgetReconJob;
 import com.bidpulse.job.DltReplayJob;
 import com.bidpulse.job.ReconReportStore;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -48,7 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         ConsoleBudgetController.class,
         ConsoleOverviewController.class,
         ConsoleAdsController.class,
-        ConsoleOpsController.class
+        ConsoleOpsController.class,
+        ConsoleDataController.class
 })
 @TestPropertySource(properties = {
         "bidpulse.console.enabled=true",
@@ -88,6 +92,16 @@ class ConsoleApiTest {
 
     @MockBean
     private ReconReportStore reconReportStore;
+
+    @MockBean
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    void enableConsoleWrite() {
+        BidPulseProperties.Console console = new BidPulseProperties.Console();
+        console.setAllowWrite(true);
+        when(props.getConsole()).thenReturn(console);
+    }
 
     @Test
     @DisplayName("竞价接口返回 data + wallMs，字段与前端类型一致")
@@ -203,5 +217,20 @@ class ConsoleApiTest {
                 .andExpect(jsonPath("$.data.status").value("OK"))
                 .andExpect(jsonPath("$.data.adCount").value(128))
                 .andExpect(jsonPath("$.data.repaired").value(2));
+    }
+
+    @Test
+    @DisplayName("新建广告复用 AdAdminService 并返回 id")
+    void createAdReturnsId() throws Exception {
+        when(adAdminService.create(any(AdUpsertRequest.class))).thenReturn(123L);
+
+        mockMvc.perform(post("/console-api/v1/ads")
+                        .contentType("application/json")
+                        .content("{\"advertiserId\":1,\"title\":\"新广告\","
+                                + "\"creativeUrl\":\"https://cdn.example.com/a.jpg\","
+                                + "\"categoryCode\":\"travel\",\"bid\":1.2,\"dailyBudget\":1000,"
+                                + "\"targets\":[{\"dimType\":1,\"dimValue\":\"110000\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(123));
     }
 }

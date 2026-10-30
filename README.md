@@ -27,7 +27,7 @@
 - **可丢明细异步落库**：竞价明细走本地有界队列，500 条或 200ms 批量刷盘，队列满直接丢，绝不阻塞主链路。
 - **预算生命周期完整**：检索阶段预热 key、Lua 惰性播种、日预算复位、管理端改预算当天同步 Redis、历史 key 定时清理。
 - **可观测**：Actuator 健康检查、Metrics、Prometheus；消费组 lag 查询接口。
-- **演示控制台（前后端分离）**：独立 `console-ui/`（Vue 3 + Vite + Element Plus），通过 `/console-api/v1` 展示概览、竞价结果、广告投放、预算/频次状态与消费组 lag；后端不渲染页面。
+- **演示控制台（前后端分离）**：独立 `console-ui/`（Vue 3 + Vite + Element Plus），通过 `/console-api/v1` 展示概览、竞价结果、广告投放、预算/频次状态、Kafka/DLT/对账、数据浏览与运行时开关；后端不渲染页面。
 
 ---
 
@@ -182,7 +182,7 @@ bidpulse:
     allowed-origins: "http://localhost:5173"
 ```
 
-P0/P1/P2 页面：概览、竞价实验室、广告与投放、预算与频次、Kafka 异步运维（含 DLT 浏览/重放、预算对账）。完整说明见 `console-ui/README.md`。
+P0/P1/P2/P3 页面：概览、竞价实验室、广告与投放、预算与频次、Kafka 异步运维（含 DLT 浏览/重放、预算对账）、数据浏览、实验与开关。完整说明见 `console-ui/README.md`。
 
 ---
 
@@ -414,11 +414,11 @@ mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,Abs
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约与只读查询边界，共 40 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约与只读查询边界，共 41 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 40 个纯单测，全量为 67 个（2026-10-31 已在本机三件套上跑通 67/67）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 41 个纯单测，全量为 68 个（2026-10-31 已在本机三件套上跑通 68/68）：
 
 ```bash
 docker compose up -d
@@ -433,7 +433,21 @@ mvn test -Pfull-tests      # 跑全量（单测 + 集成）
 
 ### CI
 
-`.github/workflows/ci.yml` 在 GitHub Actions 中启动 MySQL / Redis / Kafka services，初始化 schema 后执行 `mvn -B test -Pfull-tests`（全量）。
+`.github/workflows/ci.yml` 在 GitHub Actions 中启动 MySQL / Redis / Kafka services，初始化 schema 后执行 `mvn -B test -Pfull-tests`（全量）；另有一个独立 `console-ui` job 执行 `npm ci && npm run build && npm test`。
+
+### 前端测试
+
+```bash
+cd console-ui
+npm test          # Vitest：格式化、mock 频率上限/分页/数据/实验开关
+npm run test:e2e  # Playwright：mock 模式自动起 Vite
+```
+
+真实后端联调：
+
+```bash
+E2E_BASE_URL=http://127.0.0.1:5173 npm run test:e2e
+```
 
 ---
 

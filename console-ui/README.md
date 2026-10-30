@@ -66,23 +66,35 @@ bidpulse:
 | `#/ads` | 广告列表、详情/定向、暂停恢复、调日预算 |
 | `#/budget` | 广告当日预算、Redis TTL、当前小时频次 |
 | `#/ops` | 三个消费组 lag、DLT 浏览/重放、预算对账、暂停/恢复消费 |
+| `#/data` | bid_log / billing_event / 聚合表浏览、CSV 导出 |
+| `#/experiments` | 兜底、强制兜底、频次开关与每小时上限 |
 
 ## 未实现（后续）
 
 | 功能 | 状态 | 依赖 |
 |---|---|---|
-| 广告新建/编辑与定向编辑 | 未做 | 新建/编辑表单，复用 `/admin/ad` |
-| 数据浏览（bid_log / billing_event 等） | 未做 | `/console-api/v1/data/{table}` |
-| 实验开关 / 故障场景 / demo 重置 | 未做 | `/console-api/v1/experiments/**`，需危险操作二次确认 |
+| 故障注入 / demo 重置 | 未做 | 需要更严格的环境隔离与二次确认 |
 | 熔断器状态 / 告警规则 | 未做 | `/console-api/v1/health` 扩展 Sentinel 状态 |
 | 登录 / 权限 / 审计 | 未做 | 对外部署前必须补 |
 | SSE / WebSocket 实时推送 | 未做 | 当前为 2–5s 轮询，接口层可替换 |
-| 前端单测 / E2E | 未做 | Vitest + Playwright |
-| CSV 导出 | 未做 | 数据浏览页 |
+
+## 测试
+
+```bash
+npm test          # Vitest：格式化、mock 频率上限/分页/数据/实验开关
+npm run test:e2e  # Playwright：mock 模式，自动起 Vite（4173）
+```
+
+对真实后端联调：
+
+```bash
+# 先启动后端 8080 和 npm run dev（5173）
+E2E_BASE_URL=http://127.0.0.1:5173 npm run test:e2e
+```
 
 ## 边界
 
-- 当前支持只读展示、广告暂停/恢复、调日预算、DLT 重放、手动对账、消费组暂停/恢复。
+- 当前支持只读展示、广告新建/编辑、暂停/恢复、调日预算、DLT 重放、手动对账、消费组暂停/恢复、运行时开关。
 - 打开预算页不会播种预算或创建频次 key。
 - `bidpulse.console.allow-write=false` 时写操作返回 403。
 - 控制台接口默认只适合本地演示；对外部署前必须加鉴权。

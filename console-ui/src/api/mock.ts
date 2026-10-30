@@ -3,12 +3,17 @@ import type {
   AdInfo,
   AdQueryParams,
   AdTarget,
+  AdUpsertRequest,
   AdView,
   BidRequest,
   BidResult,
   BudgetView,
+  DataQueryParams,
+  DataView,
   DltMessageView,
   DltReplayStats,
+  ExperimentsUpdate,
+  ExperimentsView,
   FrequencyView,
   KafkaGroupView,
   OverviewView,
@@ -132,6 +137,27 @@ const MOCK_ADS: AdView[] = Array.from({ length: 12 }, (_, index) => {
   }
 })
 
+const MOCK_TARGETS = new Map<number, AdTarget[]>(
+  MOCK_ADS.map((ad) => [
+    ad.id,
+    [
+      { dimType: 1, dimValue: '110000' },
+      { dimType: 2, dimValue: '25-30' },
+      { dimType: 3, dimValue: 'male' },
+      { dimType: 4, dimValue: ad.categoryCode },
+    ],
+  ]),
+)
+
+let mockExperimentsState: ExperimentsView = {
+  fallbackEnabled: true,
+  fallbackForce: false,
+  frequencyEnabled: true,
+  frequencyMaxPerHour: 3,
+  detailSyncInsert: false,
+  consoleAllowWrite: true,
+}
+
 export async function mockOverview(): Promise<OverviewView> {
   await delay(160)
   const trend = Array.from({ length: 12 }, (_, index) => ({
@@ -197,13 +223,43 @@ export async function mockAds(params: AdQueryParams): Promise<PageResult<AdView>
 export async function mockAdDetail(id: number): Promise<AdDetail> {
   await delay(120)
   const ad = MOCK_ADS.find((item) => item.id === id) ?? MOCK_ADS[0]
-  const targets: AdTarget[] = [
-    { dimType: 1, dimValue: '110000' },
-    { dimType: 2, dimValue: '25-30' },
-    { dimType: 3, dimValue: 'male' },
-    { dimType: 4, dimValue: 'travel' },
-  ]
-  return { ad, targets }
+  return { ad, targets: MOCK_TARGETS.get(ad.id) ?? [] }
+}
+
+export async function mockCreateAd(req: AdUpsertRequest): Promise<{ id: number }> {
+  await delay(160)
+  const id = Math.max(...MOCK_ADS.map((ad) => ad.id)) + 1
+  const now = '2026-10-31 11:00:00'
+  MOCK_ADS.unshift({
+    id,
+    advertiserId: req.advertiserId ?? 1,
+    title: req.title,
+    creativeUrl: req.creativeUrl,
+    categoryCode: req.categoryCode,
+    bid: req.bid,
+    dailyBudget: req.dailyBudget,
+    status: req.status ?? 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  MOCK_TARGETS.set(id, req.targets)
+  return { id }
+}
+
+export async function mockUpdateAd(id: number, req: AdUpsertRequest): Promise<{ id: number; updated: boolean }> {
+  await delay(160)
+  const ad = MOCK_ADS.find((item) => item.id === id)
+  if (ad) {
+    ad.title = req.title
+    ad.creativeUrl = req.creativeUrl
+    ad.categoryCode = req.categoryCode
+    ad.bid = req.bid
+    ad.dailyBudget = req.dailyBudget
+    if (req.status != null) ad.status = req.status
+    ad.updatedAt = '2026-10-31 11:00:00'
+  }
+  MOCK_TARGETS.set(id, req.targets)
+  return { id, updated: true }
 }
 
 export async function mockChangeAdStatus(id: number, status: number): Promise<{ id: number; status: number }> {
@@ -274,4 +330,72 @@ export async function mockRunRecon(): Promise<ReconReport> {
     durationMs: 290,
   }
   return { ...mockReconReport }
+}
+
+export async function mockData(table: string, params: DataQueryParams): Promise<DataView> {
+  await delay(160)
+  const limit = Math.min(params.limit, 50)
+  if (table === 'bid_log') {
+    return {
+      table,
+      columns: ['request_id', 'ad_id', 'win_bid', 'pay_price', 'has_ad', 'cost_ms', 'bid_at'],
+      rows: Array.from({ length: Math.min(limit, 10) }, (_, index) => ({
+        request_id: `mock-${(1730000000000 + index).toString(36)}`,
+        ad_id: index === 6 ? 999999 : index % 3 === 0 ? 106 : 110,
+        win_bid: index === 6 ? null : index % 3 === 0 ? 1.0 : 1.5,
+        pay_price: index === 6 ? null : index % 3 === 0 ? 0.81 : 1.01,
+        has_ad: 1,
+        cost_ms: 28 + index * 3,
+        bid_at: `2026-10-31 10:${String(20 + index).padStart(2, '0')}:00`,
+      })),
+    }
+  }
+  if (table === 'billing_event') {
+    return {
+      table,
+      columns: ['event_id', 'ad_id', 'advertiser_id', 'pay_price', 'ts', 'event_time'],
+      rows: Array.from({ length: Math.min(limit, 8) }, (_, index) => ({
+        event_id: `evt-${index}`,
+        ad_id: 110,
+        advertiser_id: 11,
+        pay_price: 1.01,
+        ts: 1793380000000 + index,
+        event_time: '2026-10-31 10:20:00',
+      })),
+    }
+  }
+  if (table === 'bid_stat_hourly') {
+    return {
+      table,
+      columns: ['stat_hour', 'ad_id', 'impressions', 'spend'],
+      rows: [{ stat_hour: '2026-10-31 10:00', ad_id: 110, impressions: 12, spend: 12.12 }],
+    }
+  }
+  if (table === 'ad_freq') {
+    return {
+      table,
+      columns: ['ad_id', 'cnt'],
+      rows: MOCK_ADS.slice(0, 5).map((ad) => ({ ad_id: ad.id, cnt: 3 })),
+    }
+  }
+  return {
+    table: 'processed_event',
+    columns: ['event_id', 'grp', 'created_at'],
+    rows: ['billing-recon', 'hourly-preagg', 'freq-antifraud'].map((grp) => ({
+      event_id: 'mock-event-1',
+      grp,
+      created_at: '2026-10-31 10:20:00',
+    })),
+  }
+}
+
+export async function mockExperiments(): Promise<ExperimentsView> {
+  await delay(100)
+  return { ...mockExperimentsState }
+}
+
+export async function mockUpdateExperiments(update: ExperimentsUpdate): Promise<ExperimentsView> {
+  await delay(120)
+  mockExperimentsState = { ...mockExperimentsState, ...update }
+  return { ...mockExperimentsState }
 }

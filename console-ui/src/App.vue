@@ -24,11 +24,13 @@ const active = computed(() => route.path)
         <el-menu-item index="/ads">广告与投放</el-menu-item>
         <el-menu-item index="/budget">预算与频次</el-menu-item>
         <el-menu-item index="/ops">异步运维</el-menu-item>
+        <el-menu-item index="/data">数据浏览</el-menu-item>
+        <el-menu-item index="/experiments">实验与开关</el-menu-item>
       </el-menu>
 
       <div class="sidebar-foot">
-        <span>P1</span>
-        <p>概览 · 投放 · 竞价 · 预算 · Kafka</p>
+        <span>P3</span>
+        <p>概览 · 投放 · 竞价 · 运维 · 数据 · 实验</p>
       </div>
     </el-aside>
 
