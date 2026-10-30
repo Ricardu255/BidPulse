@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 预算服务
@@ -80,6 +81,62 @@ public class BudgetService {
         INSUFFICIENT,
         NEEDS_SEED,
         FREQ_CAPPED
+    }
+
+    /**
+     * 预算只读快照，供控制台展示；不触发播种，也不改变任何状态。
+     *
+     * @param remainingCents 剩余额度（分）；key 未初始化时为 null
+     * @param spentCents     已消耗（分）；key 未初始化时为 null
+     * @param ttlSeconds     预算 key 的剩余 TTL（秒）；-1 表示无过期，-2 表示 key 不存在
+     * @param seeded         budget key 是否存在
+     */
+    public record BudgetSnapshot(Long remainingCents, Long spentCents, Long ttlSeconds, boolean seeded) {
+    }
+
+    /**
+     * 频次只读快照，供控制台展示。
+     *
+     * @param count      当前小时该用户对该广告的成交次数；尚未计数时为 null
+     * @param maxPerHour 配置的上限
+     * @param ttlSeconds 频次 key 的剩余 TTL（秒）；-1 无过期，-2 不存在
+     */
+    public record FrequencySnapshot(Long count, int maxPerHour, Long ttlSeconds) {
+    }
+
+    /**
+     * 读取某广告当天的预算状态。
+     *
+     * <p>只读：不调用 {@code initIfAbsent}，避免“打开控制台”这个动作改变预算状态。
+     * budget key 缺失但 spent 存在时按「日预算 − 已消耗」反推，与 {@code peekBalances} 口径一致。
+     */
+    public BudgetSnapshot snapshot(Long adId, BigDecimal dailyBudget) {
+        String date = LocalDate.now().format(DATE_FMT);
+        String budgetRaw = redis.opsForValue().get(budgetKey(adId, date));
+        String spentRaw = redis.opsForValue().get(spentKey(adId, date));
+        Long ttl = redis.getExpire(budgetKey(adId, date), TimeUnit.SECONDS);
+
+        Long remaining = parseCentsOrNull(budgetRaw);
+        Long spent = parseCentsOrNull(spentRaw);
+        if (remaining == null && spent != null && dailyBudget != null) {
+            remaining = Math.max(0, toCents(dailyBudget) - spent);
+        }
+        return new BudgetSnapshot(remaining, spent, ttl == null ? -1L : ttl, budgetRaw != null);
+    }
+
+    /**
+     * 读取某用户当前小时对某广告的频次计数。
+     *
+     * <p>只读：键不存在时 count 为 null，不主动创建空 Hash。
+     */
+    public FrequencySnapshot snapshotFrequency(String userId, Long adId) {
+        String key = freqKey(userId, LocalDateTime.now());
+        Object raw = redis.opsForHash().get(key, String.valueOf(adId));
+        Long ttl = redis.getExpire(key, TimeUnit.SECONDS);
+        Long count = raw == null ? null : parseCentsOrNull(String.valueOf(raw));
+        return new FrequencySnapshot(count,
+                Math.max(1, props.getFrequency().getMaxPerHour()),
+                ttl == null ? -1L : ttl);
     }
 
     /**
@@ -661,6 +718,18 @@ public class BudgetService {
     /** 分 -> 元 */
     private static BigDecimal parse(String cents) {
         return new BigDecimal(cents).movePointLeft(2);
+    }
+
+    /** 只读取整数值（分 / 计数）；缺失或脏值返回 null，由调用方决定如何展示。 */
+    private static Long parseCentsOrNull(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** 与预热 / Lua 惰性播种同一 TTL 口径，避免产生永不过期的预算 key */

@@ -66,17 +66,20 @@ public class BudgetReconJob {
     private final BudgetService budgetService;
     private final BidPulseProperties props;
     private final MeterRegistry meterRegistry;
+    private final ReconReportStore reportStore;
 
     public BudgetReconJob(StringRedisTemplate redis,
                           JdbcTemplate jdbc,
                           BudgetService budgetService,
                           BidPulseProperties props,
-                          MeterRegistry meterRegistry) {
+                          MeterRegistry meterRegistry,
+                          ReconReportStore reportStore) {
         this.redis = redis;
         this.jdbc = jdbc;
         this.budgetService = budgetService;
         this.props = props;
         this.meterRegistry = meterRegistry;
+        this.reportStore = reportStore;
     }
 
     /**
@@ -96,12 +99,31 @@ public class BudgetReconJob {
             return;
         }
         try {
-            ReconcileSummary s = reconcile(LocalDate.now());
-            log.info("预算对账完成：对账 {} 条，Redis 高于账单告警 {} 条，按账单修复 {} 条",
-                    s.adCount(), s.alerted(), s.repaired());
+            runOnce();
         } catch (Exception e) {
             // 对账失败不应影响业务；下一次调度会重新扫描。Redis/DB 故障时只记录不重试。
             log.warn("预算对账失败（下次调度重试）: {} - {}", e.getClass().getSimpleName(), e.getMessage());
+        }
+    }
+
+    /**
+     * 立即执行一轮对账并记录结果，供控制台手动触发。
+     *
+     * <p>失败时会先把 FAILED 结果写入 {@link ReconReportStore}，再以 RuntimeException 抛出，
+     * 让调用方能把 503 返回给页面。
+     */
+    public synchronized ReconcileSummary runOnce() {
+        long start = System.currentTimeMillis();
+        try {
+            ReconcileSummary s = reconcile(LocalDate.now());
+            long cost = System.currentTimeMillis() - start;
+            reportStore.record("OK", s.adCount(), s.alerted(), s.repaired(), cost, null);
+            log.info("预算对账完成：对账 {} 条，Redis 高于账单告警 {} 条，按账单修复 {} 条，耗时 {}ms",
+                    s.adCount(), s.alerted(), s.repaired(), cost);
+            return s;
+        } catch (RuntimeException e) {
+            reportStore.record("FAILED", 0, 0, 0, System.currentTimeMillis() - start, e.getMessage());
+            throw e;
         }
     }
 

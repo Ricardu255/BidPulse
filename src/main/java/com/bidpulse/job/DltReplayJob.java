@@ -59,7 +59,7 @@ public class DltReplayJob {
     static final String ATTEMPT_HEADER = "x-replay-count";
 
     /** 重放专用消费组，与三个业务消费组隔离 */
-    static final String REPLAY_GROUP = "dlt-replay";
+    public static final String REPLAY_GROUP = "dlt-replay";
 
     /** 单次 poll 的最长阻塞时间，保证调度能在 max-duration 内及时收敛 */
     private static final Duration POLL_TIMEOUT = Duration.ofMillis(500);
@@ -77,8 +77,8 @@ public class DltReplayJob {
         SKIPPED_EXHAUSTED
     }
 
-    /** 一轮重放的统计（供日志与测试断言） */
-    record ReplayStats(int replayed, int skippedInvalid, int skippedExhausted) {
+    /** 一轮重放的统计（供日志、控制台与测试断言） */
+    public record ReplayStats(int replayed, int skippedInvalid, int skippedExhausted) {
     }
 
     private final KafkaProperties kafkaProperties;
@@ -118,13 +118,23 @@ public class DltReplayJob {
     }
 
     /**
-     * 执行一轮重放（包级可见，供测试直接调用）。
-     *
-     * @return 本轮统计
+     * 执行一轮重放（使用配置里的 max-records；包级可见，供测试直接调用）。
      */
     ReplayStats replayOnce() {
+        return replayOnce(Math.max(1, props.getKafka().getDltReplayMaxRecords()));
+    }
+
+    /**
+     * 执行一轮重放，允许控制台临时指定单轮上限。
+     *
+     * <p>{@code synchronized}：定时任务与控制台手动触发共用同一个消费组位点，
+     * 并发跑两轮会让位点提交交叉，虽然幂等但会产生无意义的重复重放。
+     *
+     * @param maxRecords 单轮最多处理的 DLT 记录数
+     */
+    public synchronized ReplayStats replayOnce(int maxRecords) {
         BidPulseProperties.Kafka cfg = props.getKafka();
-        int maxRecords = Math.max(1, cfg.getDltReplayMaxRecords());
+        maxRecords = Math.max(1, maxRecords);
         long maxDurationMs = Math.max(1, cfg.getDltReplayMaxDurationMs());
 
         // 本项目未配置 SSL bundle，传 null 走无 SSL 分支

@@ -39,6 +39,11 @@ public class BizException extends RuntimeException {
         return new BizException(409, msg);
     }
 
+    /** 403：当前开关/权限不允许该操作 */
+    public static BizException forbidden(String msg) {
+        return new BizException(403, msg);
+    }
+
     /** 503：依赖暂时不可用（如 Kafka 管理查询失败/超时） */
     public static BizException unavailable(String msg) {
         return new BizException(503, msg);

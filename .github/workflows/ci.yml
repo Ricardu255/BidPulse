@@ -88,3 +88,26 @@ jobs:
       - name: Run tests
         # -Pfull-tests：CI 有 services，跑全量（含 @Tag("integration")）
         run: mvn -B test -Pfull-tests
+
+  console-ui:
+    # 前后端分离：前端独立构建，不复用后端 job
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: console-ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build

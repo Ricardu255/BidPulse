@@ -36,6 +36,7 @@ public class BidPulseProperties {
     private Kafka kafka = new Kafka();
     private Budget budget = new Budget();
     private Frequency frequency = new Frequency();
+    private Console console = new Console();
 
     @Data
     public static class Timeout {
@@ -189,5 +190,25 @@ public class BidPulseProperties {
          * 取 2 小时给跨小时边界留出冗余，避免窗口末尾写入的键过早消失。
          */
         private long keyTtlSeconds = 7200;
+    }
+
+    /**
+     * 本地演示控制台配置。
+     *
+     * <p>控制台本身只是现有服务的只读聚合 + 少量运维动作，不承载业务逻辑。
+     * 默认关闭，只有在显式打开 {@code bidpulse.console.enabled=true} 时才注册接口；
+     * 写操作（暂停/恢复消费）再由 {@code allow-write} 单独控制。
+     */
+    @Data
+    public static class Console {
+        /** 是否注册 /console-api/v1 接口 */
+        private boolean enabled = false;
+        /** 是否允许暂停/恢复消费等写操作；只读查询不受影响 */
+        private boolean allowWrite = false;
+        /**
+         * 前后端分离部署时允许的前端来源，逗号分隔。
+         * 开发态默认放行 Vite（5173）；同源部署或使用 Vite 代理时不会触发 CORS。
+         */
+        private String allowedOrigins = "http://localhost:5173";
     }
 }
