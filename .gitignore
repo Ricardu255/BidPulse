@@ -13,6 +13,8 @@
 console-ui/node_modules/
 console-ui/dist/
 console-ui/screenshots/
+console-ui/test-results/
+console-ui/playwright-report/
 src/main/resources/static/console/
 
 # 编译产物：必须忽略。旧配置里写成 !/target/ 把 .class 全部放行进了仓库

@@ -21,7 +21,7 @@ public class ConsoleCorsConfig implements WebMvcConfigurer {
     private final String allowedOrigins;
 
     public ConsoleCorsConfig(
-            @Value("${bidpulse.console.allowed-origins:http://localhost:5173}") String allowedOrigins) {
+            @Value("${bidpulse.console.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}") String allowedOrigins) {
         this.allowedOrigins = allowedOrigins;
     }
 

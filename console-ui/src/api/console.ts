@@ -4,7 +4,10 @@ import {
   mockAds,
   mockBudget,
   mockChangeAdStatus,
+  mockCreateAd,
+  mockData,
   mockDltMessages,
+  mockExperiments,
   mockFrequency,
   mockKafkaGroups,
   mockOverview,
@@ -15,18 +18,25 @@ import {
   mockResume,
   mockRunBid,
   mockRunRecon,
+  mockUpdateAd,
   mockUpdateAdBudget,
+  mockUpdateExperiments,
 } from './mock'
 import type {
   AdDetail,
   AdQueryParams,
+  AdUpsertRequest,
   AdView,
   BidRequest,
   BidResult,
   BudgetView,
   BurstRow,
+  DataQueryParams,
+  DataView,
   DltMessageView,
   DltReplayStats,
+  ExperimentsUpdate,
+  ExperimentsView,
   FrequencyView,
   KafkaGroupView,
   OverviewView,
@@ -132,6 +142,19 @@ export function getAdDetail(id: number): Promise<AdDetail> {
   return request<AdDetail>(`/ads/${id}`)
 }
 
+export function createAd(req: AdUpsertRequest): Promise<{ id: number }> {
+  if (USE_MOCK) return mockCreateAd(req)
+  return request<{ id: number }>('/ads', { method: 'POST', body: JSON.stringify(req) })
+}
+
+export function updateAd(id: number, req: AdUpsertRequest): Promise<{ id: number; updated: boolean }> {
+  if (USE_MOCK) return mockUpdateAd(id, req)
+  return request<{ id: number; updated: boolean }>(`/ads/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(req),
+  })
+}
+
 export function changeAdStatus(id: number, status: number): Promise<{ id: number; status: number }> {
   if (USE_MOCK) return mockChangeAdStatus(id, status)
   return request<{ id: number; status: number }>(`/ads/${id}/status?status=${status}`, { method: 'PUT' })
@@ -166,4 +189,26 @@ export function getReconReport(): Promise<ReconReport | null> {
 export function runRecon(): Promise<ReconReport> {
   if (USE_MOCK) return mockRunRecon()
   return request<ReconReport>('/recon/run', { method: 'POST' })
+}
+
+export function getData(table: string, params: DataQueryParams): Promise<DataView> {
+  if (USE_MOCK) return mockData(table, params)
+  const search = new URLSearchParams()
+  search.set('limit', String(params.limit))
+  if (params.adId != null) search.set('adId', String(params.adId))
+  if (params.requestId) search.set('requestId', params.requestId)
+  return request<DataView>(`/data/${encodeURIComponent(table)}?${search.toString()}`)
+}
+
+export function getExperiments(): Promise<ExperimentsView> {
+  if (USE_MOCK) return mockExperiments()
+  return request<ExperimentsView>('/experiments')
+}
+
+export function updateExperiments(update: ExperimentsUpdate): Promise<ExperimentsView> {
+  if (USE_MOCK) return mockUpdateExperiments(update)
+  return request<ExperimentsView>('/experiments', {
+    method: 'PUT',
+    body: JSON.stringify(update),
+  })
 }

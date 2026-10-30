@@ -8,7 +8,9 @@
     "dev:mock": "vite --mode mock",
     "build": "vue-tsc --noEmit && vite build",
     "build:embedded": "vue-tsc --noEmit && vite build --outDir ../src/main/resources/static/console --emptyOutDir",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "element-plus": "^2.8.8",
@@ -16,9 +18,11 @@
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
+    "vitest": "^2.1.9",
     "vue-tsc": "^2.1.10"
   }
 }

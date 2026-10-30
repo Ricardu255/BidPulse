@@ -250,4 +250,4 @@ bidpulse:
     # 写操作开关：关闭后只保留查询，暂停/恢复接口返回 403
     allow-write: true
     # 前后端分开部署时允许的前端来源（逗号分隔）；开发态为 Vite 默认端口
-    allowed-origins: "http://localhost:5173"
+    allowed-origins: "http://localhost:5173,http://127.0.0.1:5173"

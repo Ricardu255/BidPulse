@@ -30,6 +30,16 @@ const router = createRouter({
       component: () => import('@/views/OpsView.vue'),
       meta: { title: '异步运维' },
     },
+    {
+      path: '/data',
+      component: () => import('@/views/DataView.vue'),
+      meta: { title: '数据浏览' },
+    },
+    {
+      path: '/experiments',
+      component: () => import('@/views/ExperimentsView.vue'),
+      meta: { title: '实验与开关' },
+    },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
 })
