@@ -37,7 +37,7 @@ public class FallbackAdProvider {
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
-    private final boolean enabled;
+    private final BidPulseProperties props;
     /** 正常刷新间隔（ms）：运营改 Redis 后最多这么久生效，期间兜底路径不再访问 Redis */
     private final long cacheTtlMs;
     /** 读取失败后的退避（ms）：期间直接用缓存，Redis 故障时兜底路径不会被命令超时拖慢 */
@@ -53,7 +53,7 @@ public class FallbackAdProvider {
                               BidPulseProperties props) {
         this.redis = redis;
         this.objectMapper = objectMapper;
-        this.enabled = props.getFallback().isEnabled();
+        this.props = props;
         this.cacheTtlMs = Math.max(0L, props.getFallback().getCacheTtlMs());
         this.retryBackoffMs = Math.max(0L, props.getFallback().getRetryBackoffMs());
         seed();
@@ -64,7 +64,8 @@ public class FallbackAdProvider {
      * 置 false 只用于 A/B 对照实验——复现「没有兜底机制的旧实现」，测量改造前的空广告率。
      */
     public boolean enabled() {
-        return enabled;
+        // 运行时读取：控制台“演示开关”可以立即改变兜底行为。
+        return props.getFallback().isEnabled();
     }
 
     /**

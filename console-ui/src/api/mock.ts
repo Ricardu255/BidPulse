@@ -325,6 +325,7 @@ export async function mockDltMessages(limit = 20): Promise<DltMessageView[]> {
       payPrice: 1.01,
     }),
     replayCount: index % 3,
+    processed: index % 2 === 0,
     timestamp: `2026-10-31 10:2${index}:00`,
     headers: {
       'x-replay-count': String(index % 3),

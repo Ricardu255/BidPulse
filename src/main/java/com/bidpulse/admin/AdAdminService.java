@@ -151,6 +151,28 @@ public class AdAdminService {
     }
 
     /**
+     * 只更新日预算：单条 UPDATE，不读取/回写 title、bid 等字段，
+     * 避免与编辑广告的并发请求互相覆盖。
+     */
+    @Transactional
+    public void updateDailyBudget(Long id, BigDecimal dailyBudget) {
+        if (dailyBudget == null || dailyBudget.compareTo(new BigDecimal("1.00")) < 0) {
+            throw BizException.badRequest("dailyBudget 应不小于 1.00 元");
+        }
+        Ad existing = mustGet(id);
+        if (existing.getDailyBudget() != null
+                && dailyBudget.compareTo(existing.getDailyBudget()) == 0) {
+            return;
+        }
+        int updated = adMapper.updateDailyBudget(id, dailyBudget);
+        if (updated == 0) {
+            throw BizException.notFound("广告不存在: id=" + id);
+        }
+        syncBudgetAfterCommit(id, dailyBudget);
+        log.info("只更新广告 id={} 日预算为 {}，事务提交后同步当天 Redis", id, dailyBudget);
+    }
+
+    /**
      * 广告日预算变更后，把新额度同步到当天 Redis。
      *
      * <p>注册到事务 {@code afterCommit}：DB 回滚时绝不能留下「Redis 已改、DB 未改」的状态，

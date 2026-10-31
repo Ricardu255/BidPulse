@@ -19,6 +19,7 @@ const adId = ref<number | undefined>(undefined)
 const requestId = ref('')
 const data = ref<DataView | null>(null)
 const loading = ref(false)
+const error = ref('')
 
 function formatValue(value: unknown): string {
   if (value == null) return '—'
@@ -28,6 +29,7 @@ function formatValue(value: unknown): string {
 
 async function load(): Promise<void> {
   loading.value = true
+  error.value = ''
   try {
     data.value = await getData(table.value, {
       limit: limit.value,
@@ -35,7 +37,9 @@ async function load(): Promise<void> {
       requestId: requestId.value.trim() || undefined,
     })
   } catch (e) {
-    ElMessage.error(errorText(e))
+    error.value = errorText(e)
+    data.value = null
+    ElMessage({ message: error.value, type: 'error', grouping: true })
   } finally {
     loading.value = false
   }
@@ -43,7 +47,12 @@ async function load(): Promise<void> {
 
 function exportCsv(): void {
   if (!data.value) return
-  const escape = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
+  const escape = (value: unknown) => {
+    let text = String(value ?? '')
+    // 防止 CSV 公式注入：以 = + - @ 或控制字符开头的单元格加前缀单引号
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
+    return `"${text.replace(/"/g, '""')}"`
+  }
   const lines = [
     data.value.columns.map(escape).join(','),
     ...data.value.rows.map((row) => data.value!.columns.map((column) => escape(row[column])).join(',')),
@@ -55,7 +64,8 @@ function exportCsv(): void {
   anchor.href = url
   anchor.download = `${data.value.table}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`
   anchor.click()
-  URL.revokeObjectURL(url)
+  // 部分浏览器在 click 后立刻 revoke 会取消下载
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 onMounted(load)
@@ -76,7 +86,7 @@ onMounted(load)
         <el-select v-model="table" style="width: 230px" @change="load">
           <el-option v-for="item in tables" :key="item.value" :value="item.value" :label="item.label" />
         </el-select>
-        <el-input-number v-model="limit" :min="1" :max="200" controls-position="right" />
+        <el-input-number v-model="limit" :min="1" :max="200" :precision="0" :step="10" controls-position="right" />
         <el-input-number v-model="adId" :min="1" placeholder="adId（可空）" controls-position="right" />
         <el-input
           v-if="table === 'bid_log'"
@@ -86,7 +96,8 @@ onMounted(load)
           style="width: 210px"
         />
         <el-button type="primary" :loading="loading" @click="load">查询</el-button>
-        <el-button :disabled="!data?.rows.length" @click="exportCsv">导出 CSV</el-button>
+        <el-button :disabled="!data?.rows.length" @click="exportCsv">导出当前结果 CSV</el-button>
+        <el-button v-if="error" @click="load">重试</el-button>
       </div>
     </el-card>
 
@@ -97,7 +108,8 @@ onMounted(load)
           <span class="hint">{{ data?.rows.length ?? 0 }} 行 · 上限 200</span>
         </div>
       </template>
-      <el-table v-loading="loading" :data="data?.rows ?? []" stripe size="small" max-height="560">
+      <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="formula" />
+      <el-table v-if="!error" v-loading="loading" :data="data?.rows ?? []" stripe size="small" max-height="560">
         <el-table-column
           v-for="column in data?.columns ?? []"
           :key="column"
@@ -109,7 +121,7 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !(data?.rows.length)" description="当前条件下没有数据" :image-size="60" />
+      <el-empty v-if="!loading && !error && !(data?.rows.length)" description="当前条件下没有数据" :image-size="60" />
       <p class="hint">数据浏览只读；bid_log 由本地队列异步落库，billing_event 由 Kafka 消费异步写入。</p>
     </el-card>
   </div>

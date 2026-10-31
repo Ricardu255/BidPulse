@@ -44,6 +44,17 @@ function preview(value: string | null): string {
   return value.length > 90 ? `${value.slice(0, 90)}…` : value
 }
 
+function notifyError(e: unknown): void {
+  ElMessage({ message: errorText(e), type: 'error', grouping: true })
+}
+
+function outcomeLabel(outcome: string): string {
+  if (outcome === 'REPLAYED') return '已投递主主题'
+  if (outcome === 'SKIPPED_INVALID') return '已跳过：报文不可解析或缺少 eventId'
+  if (outcome === 'SKIPPED_EXHAUSTED') return '已跳过：达到最大重放次数'
+  return outcome
+}
+
 function reconType(status: string | undefined): 'success' | 'danger' | 'info' {
   if (status === 'OK') return 'success'
   if (status === 'FAILED') return 'danger'
@@ -67,7 +78,7 @@ async function refreshGroups(): Promise<void> {
   try {
     groups.value = await getKafkaGroups()
   } catch (e) {
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     loading.value = false
   }
@@ -78,7 +89,7 @@ async function refreshDlt(): Promise<void> {
   try {
     dltMessages.value = await getDltMessages(dltLimit.value)
   } catch (e) {
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     dltLoading.value = false
   }
@@ -89,7 +100,7 @@ async function refreshRecon(): Promise<void> {
   try {
     recon.value = await getReconReport()
   } catch (e) {
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     reconLoading.value = false
   }
@@ -107,7 +118,7 @@ async function pause(): Promise<void> {
     await refreshGroups()
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(errorText(e))
+    notifyError(e)
   }
 }
 
@@ -117,7 +128,7 @@ async function resume(): Promise<void> {
     ElMessage.success('已恢复全部消费组')
     await refreshGroups()
   } catch (e) {
-    ElMessage.error(errorText(e))
+    notifyError(e)
   }
 }
 
@@ -136,7 +147,7 @@ async function triggerReplay(): Promise<void> {
     await Promise.all([refreshDlt(), refreshGroups()])
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     replaying.value = false
   }
@@ -152,11 +163,11 @@ async function replayOne(row: DltMessageView): Promise<void> {
     )
     replayingOne.value = key
     const result = await replayDltOne(row.partition, row.offset)
-    ElMessage.success(`单条重放结果：${result.outcome}`)
+    ElMessage.success(`单条重放结果：${outcomeLabel(result.outcome)}`)
     await Promise.all([refreshDlt(), refreshGroups()])
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     replayingOne.value = null
   }
@@ -174,7 +185,8 @@ async function triggerRecon(): Promise<void> {
     ElMessage.success('对账完成')
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(errorText(e))
+    await refreshRecon()
+    notifyError(e)
   } finally {
     reconRunning.value = false
   }
@@ -189,12 +201,14 @@ function stopTimer(): void {
 
 function startTimer(): void {
   stopTimer()
-  if (auto.value) {
+  // 只在“消费组”页签轮询 lag；切到 DLT/对账后停止，避免后台无效请求和重复报错。
+  if (auto.value && activeTab.value === 'groups') {
     timer = setInterval(refreshGroups, 2000)
   }
 }
 
 watch(auto, startTimer)
+watch(activeTab, startTimer)
 
 onMounted(() => {
   refreshGroups()
@@ -232,8 +246,8 @@ onUnmounted(stopTimer)
           <div v-for="group in groups" :key="group.group" class="group-card">
             <div class="group-head">
               <strong>{{ group.group }}</strong>
-              <el-tag :type="group.exists ? 'success' : 'info'" size="small">
-                {{ group.exists ? '已注册' : '未注册' }}
+              <el-tag :type="group.exists ? (group.partitionCount ? 'success' : 'warning') : 'info'" size="small">
+                {{ group.exists ? (group.partitionCount ? '已注册' : '无位点') : '未注册' }}
               </el-tag>
             </div>
             <div class="lag" :class="{ hot: group.totalLag > 0 }">{{ group.totalLag }}</div>
@@ -261,7 +275,7 @@ onUnmounted(stopTimer)
       <el-tab-pane label="DLT 重放" name="dlt">
         <el-card class="panel" shadow="never">
           <div class="filters">
-            <span class="hint">展示待处理消息</span>
+            <span class="hint">最近 DLT 消息（含已处理/已跳过）</span>
             <el-input-number v-model="dltLimit" :min="1" :max="50" size="small" />
             <el-button size="small" :loading="dltLoading" @click="refreshDlt">刷新</el-button>
             <el-input-number v-model="replayMax" :min="1" :max="1000" size="small" />
@@ -295,6 +309,13 @@ onUnmounted(stopTimer)
             <el-table-column prop="partition" label="分区" width="80" />
             <el-table-column prop="offset" label="offset" width="100" />
             <el-table-column prop="replayCount" label="重放次数" width="100" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.processed ? 'info' : 'warning'" size="small">
+                  {{ row.processed ? '已处理' : '待处理' }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="key" label="key" width="120" />
             <el-table-column prop="timestamp" label="时间" width="170" />
             <el-table-column label="value 预览" min-width="220">
@@ -357,6 +378,15 @@ onUnmounted(stopTimer)
               <strong>{{ recon.durationMs }} ms</strong>
             </div>
           </div>
+
+          <el-alert
+            v-if="recon.status === 'FAILED'"
+            type="error"
+            :closable="false"
+            show-icon
+            :title="recon.message || '对账失败，请查看后端日志'"
+            class="formula"
+          />
 
           <el-card class="panel" shadow="never">
             <template #header>差异明细</template>

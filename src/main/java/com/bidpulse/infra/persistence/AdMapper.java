@@ -4,6 +4,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import com.bidpulse.entity.Ad;
@@ -98,6 +99,10 @@ public interface AdMapper {
 
     /** 按主键更新可变字段（内部语义：null 字段不 SET；对外 PUT 仍是全量替换） */
     int updateAd(Ad ad);
+
+    /** 只更新日预算，避免调预算时整行 read-modify-write 覆盖并发修改。 */
+    @Update("UPDATE ad SET daily_budget = #{dailyBudget} WHERE id = #{id}")
+    int updateDailyBudget(@Param("id") Long id, @Param("dailyBudget") BigDecimal dailyBudget);
 
     /** 按主键删除广告本体 */
     int deleteAd(@Param("id") Long id);

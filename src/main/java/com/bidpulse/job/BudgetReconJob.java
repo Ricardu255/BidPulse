@@ -120,15 +120,16 @@ public class BudgetReconJob {
      * <p>失败时会先把 FAILED 结果写入 {@link ReconReportStore}，再以 RuntimeException 抛出，
      * 让调用方能把 503 返回给页面。
      */
-    public synchronized ReconcileSummary runOnce() {
+    public synchronized ReconReportStore.ReconReport runOnce() {
         long start = System.currentTimeMillis();
         try {
             ReconcileSummary s = reconcile(LocalDate.now());
             long cost = System.currentTimeMillis() - start;
-            reportStore.record("OK", s.adCount(), s.alerted(), s.repaired(), cost, null, s.mismatches());
+            ReconReportStore.ReconReport report = reportStore.record(
+                    "OK", s.adCount(), s.alerted(), s.repaired(), cost, null, s.mismatches());
             log.info("预算对账完成：对账 {} 条，Redis 高于账单告警 {} 条，按账单修复 {} 条，耗时 {}ms",
                     s.adCount(), s.alerted(), s.repaired(), cost);
-            return s;
+            return report;
         } catch (RuntimeException e) {
             reportStore.record("FAILED", 0, 0, 0, System.currentTimeMillis() - start, e.getMessage(), List.of());
             throw e;

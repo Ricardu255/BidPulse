@@ -160,6 +160,7 @@ export interface DltMessageView {
   key: string | null
   value: string | null
   replayCount: number
+  processed: boolean
   timestamp: string | null
   headers: Record<string, string>
 }

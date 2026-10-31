@@ -53,8 +53,25 @@ public class KafkaLagQueryService {
         return groups().stream().mapToLong(KafkaGroupView::totalLag).sum();
     }
 
+    /** 显式区分“组不存在”和“组存在但没有提交位点”。 */
+    private boolean groupExists(String group) throws ExecutionException, InterruptedException, TimeoutException {
+        try {
+            admin.describeConsumerGroups(List.of(group)).all()
+                    .get(ADMIN_TIMEOUT_SEC, TimeUnit.SECONDS);
+            return true;
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof GroupIdNotFoundException) {
+                return false;
+            }
+            throw e;
+        }
+    }
+
     private KafkaGroupView loadGroup(String group) {
         try {
+            if (!groupExists(group)) {
+                return new KafkaGroupView(group, false, 0, 0, List.of());
+            }
             Map<TopicPartition, OffsetAndMetadata> allCommitted =
                     admin.listConsumerGroupOffsets(group).partitionsToOffsetAndMetadata()
                             .get(ADMIN_TIMEOUT_SEC, TimeUnit.SECONDS);

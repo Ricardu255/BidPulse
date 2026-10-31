@@ -62,29 +62,59 @@ const statusType = computed<TagType>(() => {
   }
 })
 
+let refreshSeq = 0
+
+function notifyError(e: unknown): void {
+  ElMessage({ message: errorText(e), type: 'error', grouping: true })
+}
+
+function isAdMissing(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 404 && /广告不存在/.test(e.message)
+}
+
 async function refresh(force = false): Promise<void> {
-  if (!session.adId || (!force && notFound.value)) return
+  if (!session.adId) {
+    budget.value = null
+    frequency.value = null
+    notFound.value = false
+    return
+  }
+  if (!force && notFound.value) return
+
+  const adId = session.adId
+  const seq = ++refreshSeq
   loading.value = true
   try {
-    const [budgetView, frequencyView] = await Promise.all([
-      getBudget(session.adId),
-      getFrequency(session.adId, session.userId),
+    const [budgetResult, frequencyResult] = await Promise.allSettled([
+      getBudget(adId),
+      getFrequency(adId, session.userId),
     ])
-    budget.value = budgetView
-    frequency.value = frequencyView
-    notFound.value = false
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 404) {
-      // adId 不存在（常见：从兜底广告 999999 或已删除广告带过来）。
-      // 不循环弹 toast，改成页面内提示，用户改 adId 后自动重试。
-      notFound.value = true
-      budget.value = null
-      frequency.value = null
+    // 请求期间用户改了 adId：丢弃旧响应，避免旧广告数据覆盖新广告。
+    if (seq !== refreshSeq || adId !== session.adId) return
+
+    if (budgetResult.status === 'rejected') {
+      const e = budgetResult.reason
+      if (isAdMissing(e)) {
+        notFound.value = true
+        budget.value = null
+        frequency.value = null
+        return
+      }
+      notifyError(e)
       return
     }
-    ElMessage.error(errorText(e))
+
+    budget.value = budgetResult.value
+    notFound.value = false
+    if (frequencyResult.status === 'fulfilled') {
+      frequency.value = frequencyResult.value
+    } else {
+      // 频次接口不可用（例如旧后端缺少 /frequency）时，仍保留预算展示。
+      frequency.value = null
+      if (!isAdMissing(frequencyResult.reason)) notifyError(frequencyResult.reason)
+    }
   } finally {
-    loading.value = false
+    if (seq === refreshSeq) loading.value = false
   }
 }
 
@@ -142,6 +172,8 @@ onUnmounted(stopTimer)
         <el-input-number
           v-model="session.adId"
           :min="1"
+          :precision="0"
+          :step="1"
           controls-position="right"
           @change="onFilterChange"
         />

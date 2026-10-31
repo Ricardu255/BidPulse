@@ -58,7 +58,7 @@ test('ops page switches between group, DLT and recon tabs', async ({ page }) => 
 test('data and experiments pages load', async ({ page }) => {
   await page.goto('/#/data')
   await expect(page.locator('h1')).toHaveText('数据查询')
-  await expect(page.getByRole('button', { name: '导出 CSV' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '导出当前结果 CSV' })).toBeVisible()
 
   await page.goto('/#/experiments')
   await expect(page.locator('h1')).toHaveText('演示开关')

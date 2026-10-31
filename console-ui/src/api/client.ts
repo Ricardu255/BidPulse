@@ -22,7 +22,7 @@ export async function requestEnvelope<T>(path: string, init?: RequestInit): Prom
   try {
     response = await fetch(`${API_BASE}${path}`, { ...init, headers })
   } catch (e) {
-    throw new ApiError(e instanceof Error ? e.message : '网络请求失败', 0)
+    throw new ApiError(friendlyMessage(0), 0)
   }
 
   let body: ApiEnvelope<T> | null = null
@@ -49,7 +49,7 @@ function friendlyMessage(status: number, serverMsg?: string): string {
   if (serverMsg) return serverMsg
   switch (status) {
     case 0:
-      return '网络请求失败，请确认后端已启动'
+      return '网络请求失败：请确认后端已启动；若为跨域，请检查 allowed-origins'
     case 403:
       return '没有权限：控制台写操作可能被关闭，或前端来源未加入 allowed-origins'
     case 404:

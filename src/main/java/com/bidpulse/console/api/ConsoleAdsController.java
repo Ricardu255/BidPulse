@@ -6,9 +6,8 @@ import com.bidpulse.api.BizException;
 import com.bidpulse.api.PageResult;
 import com.bidpulse.api.dto.AdQuery;
 import com.bidpulse.api.dto.AdUpsertRequest;
-import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.entity.Ad;
-import com.bidpulse.infra.persistence.AdMapper;
+import com.bidpulse.config.BidPulseProperties;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,7 +38,6 @@ public class ConsoleAdsController {
     private static final BigDecimal MIN_DAILY_BUDGET = new BigDecimal("1.00");
 
     private final AdAdminService adAdminService;
-    private final AdMapper adMapper;
     private final BidPulseProperties props;
 
     @GetMapping
@@ -86,20 +84,11 @@ public class ConsoleAdsController {
         if (dailyBudget == null || dailyBudget.compareTo(MIN_DAILY_BUDGET) < 0) {
             throw BizException.badRequest("dailyBudget 应不小于 1.00 元");
         }
-        Ad ad = adMapper.selectById(id);
-        if (ad == null) {
-            throw BizException.notFound("广告不存在: " + id);
+        if (dailyBudget.scale() > 2 || dailyBudget.precision() - dailyBudget.scale() > 10) {
+            throw BizException.badRequest("dailyBudget 最多 10 位整数、2 位小数");
         }
-
-        AdUpsertRequest req = new AdUpsertRequest();
-        req.setTitle(ad.getTitle());
-        req.setCreativeUrl(ad.getCreativeUrl());
-        req.setCategoryCode(ad.getCategoryCode());
-        req.setBid(ad.getBid());
-        req.setDailyBudget(dailyBudget);
-        req.setTargets(null);
-        adAdminService.update(id, req);
-
+        // 只更新 daily_budget，不整行回写，避免与编辑广告并发时互相覆盖。
+        adAdminService.updateDailyBudget(id, dailyBudget);
         return ApiResponse.ok(Map.of("id", id, "dailyBudget", dailyBudget));
     }
 

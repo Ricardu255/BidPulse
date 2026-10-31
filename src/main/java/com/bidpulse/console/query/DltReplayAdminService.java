@@ -27,8 +27,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DltReplayAdminService {
 
-    private static final Duration POLL_TIMEOUT = Duration.ofSeconds(2);
-
     private final KafkaProperties kafkaProperties;
     private final BidPulseProperties props;
     private final DltReplayJob dltReplayJob;
@@ -45,14 +43,23 @@ public class DltReplayAdminService {
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(conf)) {
             TopicPartition tp = new TopicPartition(topic, partition);
             consumer.assign(List.of(tp));
+            long beginning = consumer.beginningOffsets(List.of(tp)).getOrDefault(tp, 0L);
+            long end = consumer.endOffsets(List.of(tp)).getOrDefault(tp, 0L);
+            if (offset < beginning || offset >= end) {
+                throw BizException.notFound("DLT 消息不存在: " + topic + "-" + partition + "@" + offset);
+            }
             consumer.seek(tp, offset);
-            ConsumerRecords<String, String> records = consumer.poll(POLL_TIMEOUT);
-            for (ConsumerRecord<String, String> record : records) {
-                if (record.partition() == partition && record.offset() == offset) {
-                    return dltReplayJob.replayRecord(record);
+
+            long deadline = System.currentTimeMillis() + 3_000;
+            while (System.currentTimeMillis() < deadline) {
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(500));
+                for (ConsumerRecord<String, String> record : records) {
+                    if (record.partition() == partition && record.offset() == offset) {
+                        return dltReplayJob.replayRecord(record);
+                    }
                 }
             }
-            throw BizException.notFound("DLT 消息不存在: " + topic + "-" + partition + "@" + offset);
+            throw BizException.notFound("DLT 消息在 3s 内未拉到: " + topic + "-" + partition + "@" + offset);
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {

@@ -201,7 +201,7 @@ class ConsoleApiTest {
     void dltMessagesReturnView() throws Exception {
         when(dltQueryService.messages(20)).thenReturn(List.of(new DltMessageView(
                 "bid_event.DLT", 0, 42, "110", "{\"eventId\":\"e-1\"}",
-                2, "2026-10-31 10:20:00", Map.of("x-replay-count", "2"))));
+                2, false, "2026-10-31 10:20:00", Map.of("x-replay-count", "2"))));
 
         mockMvc.perform(get("/console-api/v1/dlt/messages").param("limit", "20"))
                 .andExpect(status().isOk())

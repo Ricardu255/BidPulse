@@ -19,11 +19,13 @@ public class ReconReportStore {
 
     private volatile ReconReport last;
 
-    public void record(String status, int adCount, int alerted, int repaired,
-                       long durationMs, String message, List<ReconMismatch> mismatches) {
-        this.last = new ReconReport(
+    public ReconReport record(String status, int adCount, int alerted, int repaired,
+                              long durationMs, String message, List<ReconMismatch> mismatches) {
+        ReconReport report = new ReconReport(
                 LocalDateTime.now().format(FMT), status, adCount, alerted, repaired,
                 durationMs, message, mismatches == null ? List.of() : List.copyOf(mismatches));
+        this.last = report;
+        return report;
     }
 
     /** 最近一次结果；从未跑过时为 null。 */
