@@ -275,8 +275,8 @@ onMounted(() => load(1))
   <div class="page">
     <header class="page-header">
       <div>
-        <h1>广告与投放</h1>
-        <p>查看广告列表、定向条件与投放状态；支持暂停/恢复和调整当日预算。</p>
+        <h1>广告管理</h1>
+        <p>管理可投放广告；新建、编辑、暂停或调预算后，下一次竞价立即生效。</p>
       </div>
       <div class="actions">
         <el-button type="primary" @click="openCreate">新建广告</el-button>

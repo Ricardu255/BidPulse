@@ -46,4 +46,9 @@ public class LocalBreakerGate implements BreakerGate {
     public String impl() {
         return "local(resource=" + resource + ", state=" + delegate.currentState() + ")";
     }
+
+    @Override
+    public String state() {
+        return delegate.currentState();
+    }
 }

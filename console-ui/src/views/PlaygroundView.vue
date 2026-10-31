@@ -20,6 +20,7 @@ const form = reactive<BidRequest>({
 
 const loading = ref(false)
 const bursting = ref(false)
+const showAdvanced = ref(false)
 const last = ref<BidResult | null>(null)
 const wallMs = ref<number | null>(null)
 const burstRows = ref<BurstRow[]>([])
@@ -105,8 +106,8 @@ onMounted(() => {
   <div class="page">
     <header class="page-header">
       <div>
-        <h1>竞价实验室</h1>
-        <p>发起一次真实竞价，查看候选、胜出广告、二价成交价与耗时；连打可观察频次超限。</p>
+        <h1>模拟竞价</h1>
+        <p>模拟一次流量请求，观察候选、二价成交价和频次拦截；不用写代码。</p>
       </div>
       <el-tag type="info" effect="plain">POST /console-api/v1/bids</el-tag>
     </header>
@@ -115,7 +116,7 @@ onMounted(() => {
       <template #header>请求参数</template>
       <el-form :model="form" label-position="top">
         <div class="form-grid">
-          <el-form-item label="广告位 slotCode">
+          <el-form-item v-if="showAdvanced" label="广告位 slotCode">
             <el-input v-model="form.slotCode" />
           </el-form-item>
           <el-form-item label="地域 region">
@@ -131,7 +132,7 @@ onMounted(() => {
               <el-option :value="0" label="未知" />
             </el-select>
           </el-form-item>
-          <el-form-item label="类目 categoryCode">
+          <el-form-item v-if="showAdvanced" label="类目 categoryCode">
             <el-input v-model="form.categoryCode" placeholder="可空" />
           </el-form-item>
           <el-form-item label="用户 userId">
@@ -142,7 +143,10 @@ onMounted(() => {
         <div class="actions">
           <el-button type="primary" :loading="loading" @click="submitBid">发起竞价</el-button>
           <el-button :loading="bursting" @click="submitBurst">连打 4 次</el-button>
-          <span class="hint">同一 userId 对同一广告默认每小时最多 3 次；第 4 次会被跳过。</span>
+          <el-button link type="primary" @click="showAdvanced = !showAdvanced">
+            {{ showAdvanced ? '收起高级参数' : '高级参数' }}
+          </el-button>
+          <span class="hint">默认值已够演示；需要改广告位/类目时再展开。</span>
         </div>
       </el-form>
     </el-card>
@@ -196,7 +200,8 @@ onMounted(() => {
         type="warning"
         :closable="false"
         show-icon
-        title="兜底广告不计费（priceMode=2）"
+        title="没有可投放的真实广告，已返回兜底广告"
+        description="兜底广告 adId=999999 是保底广告，不是广告主投放；出价只是配置值，payPrice 为空，不计费（priceMode=2）。"
       />
 
       <el-table :data="last?.topCandidates ?? []" stripe size="small">

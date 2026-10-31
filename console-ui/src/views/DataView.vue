@@ -65,8 +65,8 @@ onMounted(load)
   <div class="page">
     <header class="page-header">
       <div>
-        <h1>数据浏览</h1>
-        <p>白名单表分页查询；只支持少量等值过滤，不提供通用 SQL 控制台。</p>
+        <h1>数据查询</h1>
+        <p>排查问题时直接看底层表；只读查询，支持导出 CSV。</p>
       </div>
       <el-tag type="info" effect="plain">GET /console-api/v1/data/{table}</el-tag>
     </header>

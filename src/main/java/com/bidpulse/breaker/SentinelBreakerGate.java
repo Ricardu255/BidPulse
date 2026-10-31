@@ -64,4 +64,9 @@ public class SentinelBreakerGate implements BreakerGate {
     public String impl() {
         return "sentinel(resource=" + resource + ")";
     }
+
+    @Override
+    public String state() {
+        return "SENTINEL";
+    }
 }

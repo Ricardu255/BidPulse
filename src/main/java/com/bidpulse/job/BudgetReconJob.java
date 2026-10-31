@@ -61,6 +61,9 @@ public class BudgetReconJob {
     /** SCAN 建议返回条数（仅 hint，Redis 不保证） */
     private static final int SCAN_COUNT = 500;
 
+    /** 控制台最多展示的差异明细条数，避免一次对账把大列表塞进内存/响应。 */
+    private static final int MAX_MISMATCH_DETAILS = 200;
+
     private final StringRedisTemplate redis;
     private final JdbcTemplate jdbc;
     private final BudgetService budgetService;
@@ -89,7 +92,12 @@ public class BudgetReconJob {
      * @param alerted  Redis &gt; DB 超过容差、只告警不修复的广告数
      * @param repaired DB &gt; Redis 超过容差、已按账单修复 Redis 的广告数
      */
-    public record ReconcileSummary(int adCount, int alerted, int repaired) {
+    public record ReconcileSummary(int adCount, int alerted, int repaired,
+                                   List<ReconMismatch> mismatches) {
+        /** 兼容旧调用：没有差异明细时给空列表。 */
+        public ReconcileSummary(int adCount, int alerted, int repaired) {
+            this(adCount, alerted, repaired, List.of());
+        }
     }
 
     /** 默认每小时第 15 分钟对账一次；{@code enabled=false} 时直接跳过。 */
@@ -117,12 +125,12 @@ public class BudgetReconJob {
         try {
             ReconcileSummary s = reconcile(LocalDate.now());
             long cost = System.currentTimeMillis() - start;
-            reportStore.record("OK", s.adCount(), s.alerted(), s.repaired(), cost, null);
+            reportStore.record("OK", s.adCount(), s.alerted(), s.repaired(), cost, null, s.mismatches());
             log.info("预算对账完成：对账 {} 条，Redis 高于账单告警 {} 条，按账单修复 {} 条，耗时 {}ms",
                     s.adCount(), s.alerted(), s.repaired(), cost);
             return s;
         } catch (RuntimeException e) {
-            reportStore.record("FAILED", 0, 0, 0, System.currentTimeMillis() - start, e.getMessage());
+            reportStore.record("FAILED", 0, 0, 0, System.currentTimeMillis() - start, e.getMessage(), List.of());
             throw e;
         }
     }
@@ -135,7 +143,7 @@ public class BudgetReconJob {
     ReconcileSummary reconcile(LocalDate date) {
         Map<Long, Long> redisSpent = readRedisSpent(date);
         if (redisSpent.isEmpty()) {
-            return new ReconcileSummary(0, 0, 0);
+            return new ReconcileSummary(0, 0, 0, List.of());
         }
 
         int batchSize = Math.max(1, props.getBudget().getRecon().getBatchSize());
@@ -144,6 +152,7 @@ public class BudgetReconJob {
         int checked = 0;
         int alerted = 0;
         int repaired = 0;
+        List<ReconMismatch> mismatches = new ArrayList<>();
 
         List<Long> adIds = new ArrayList<>(redisSpent.keySet());
         for (int from = 0; from < adIds.size(); from += batchSize) {
@@ -161,6 +170,10 @@ public class BudgetReconJob {
                     alerted++;
                     meterRegistry.counter("bidpulse.budget.recon.mismatch", "direction", "redis_ahead")
                             .increment();
+                    if (mismatches.size() < MAX_MISMATCH_DETAILS) {
+                        mismatches.add(new ReconMismatch(adId, redisCents, dbCents, diff,
+                                "REDIS_AHEAD", "ALERT"));
+                    }
                     log.warn("预算对账不一致：Redis 高于账单 adId={} date={} redis={}分 db={}分 diff={}分"
                                     + "（疑似计费事件未落库，检查 DLT / 消费者滞后；不自动下调 spent）",
                             adId, date, redisCents, dbCents, diff);
@@ -175,6 +188,10 @@ public class BudgetReconJob {
                 if (dailyBudget == null) {
                     // 广告已被删除 / 不在 ad 表：无法得知日预算，无法重算余额；
                     // 保留 Redis 现状并告警，由人工确认是否清理残留 key。
+                    if (mismatches.size() < MAX_MISMATCH_DETAILS) {
+                        mismatches.add(new ReconMismatch(adId, redisCents, dbCents, diff,
+                                "DB_AHEAD", "SKIPPED"));
+                    }
                     log.warn("预算对账无法修复：ad 表缺少该广告 adId={} date={} db={}分 redis={}分",
                             adId, date, dbCents, redisCents);
                     continue;
@@ -182,6 +199,10 @@ public class BudgetReconJob {
                 boolean ok = budgetService.repairSpentFromDb(adId, dailyBudget, dbCents, date);
                 if (ok) {
                     repaired++;
+                    if (mismatches.size() < MAX_MISMATCH_DETAILS) {
+                        mismatches.add(new ReconMismatch(adId, redisCents, dbCents, diff,
+                                "DB_AHEAD", "REPAIRED"));
+                    }
                     meterRegistry.counter("bidpulse.budget.recon.repaired").increment();
                     log.warn("预算对账修复：Redis 低于账单，已按账单重算 adId={} date={} db={}分 redis={}分",
                             adId, date, dbCents, redisCents);
@@ -189,7 +210,7 @@ public class BudgetReconJob {
                 // ok=false：并发扣减已把 spent 推到账单之上（Lua 内只升不降），无需修复
             }
         }
-        return new ReconcileSummary(checked, alerted, repaired);
+        return new ReconcileSummary(checked, alerted, repaired, mismatches);
     }
 
     /**

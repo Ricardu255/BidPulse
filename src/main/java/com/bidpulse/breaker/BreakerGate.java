@@ -47,4 +47,12 @@ public interface BreakerGate {
 
     /** 当前实现的自述（含资源名 / 状态），仅用于启动日志与观测。 */
     String impl();
+
+    /**
+     * 当前可读状态（CLOSED / OPEN / HALF_OPEN / SENTINEL / UNKNOWN）。
+     * Sentinel 的状态由其内部统计托管，这里只返回实现标识，避免误读。
+     */
+    default String state() {
+        return "UNKNOWN";
+    }
 }

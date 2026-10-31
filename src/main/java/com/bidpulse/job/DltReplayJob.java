@@ -68,7 +68,7 @@ public class DltReplayJob {
     private static final int POLL_MAX_RECORDS = 500;
 
     /** 单条重放结果 */
-    enum ReplayOutcome {
+    public enum ReplayOutcome {
         /** 已重新投递到主主题 */
         REPLAYED,
         /** 报文不可解析 / 缺少 eventId，不重放（保留在 DLT） */
@@ -210,7 +210,7 @@ public class DltReplayJob {
      *
      * @throws RuntimeException 投递失败（由调用方决定不提交当前位点）
      */
-    ReplayOutcome replayRecord(ConsumerRecord<String, String> record) {
+    public ReplayOutcome replayRecord(ConsumerRecord<String, String> record) {
         BidPulseProperties.Kafka cfg = props.getKafka();
 
         if (record.value() == null || !parseable(record.value())) {

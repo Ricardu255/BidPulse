@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * 保存最近一次预算对账结果，供控制台只读查询。
@@ -19,9 +20,10 @@ public class ReconReportStore {
     private volatile ReconReport last;
 
     public void record(String status, int adCount, int alerted, int repaired,
-                       long durationMs, String message) {
+                       long durationMs, String message, List<ReconMismatch> mismatches) {
         this.last = new ReconReport(
-                LocalDateTime.now().format(FMT), status, adCount, alerted, repaired, durationMs, message);
+                LocalDateTime.now().format(FMT), status, adCount, alerted, repaired,
+                durationMs, message, mismatches == null ? List.of() : List.copyOf(mismatches));
     }
 
     /** 最近一次结果；从未跑过时为 null。 */
@@ -43,6 +45,13 @@ public class ReconReportStore {
             int alerted,
             int repaired,
             long durationMs,
-            String message) {
+            String message,
+            List<ReconMismatch> mismatches) {
+
+        /** 兼容旧调用 / 旧测试：没有差异明细时给空列表。 */
+        public ReconReport(String lastRunAt, String status, int adCount, int alerted,
+                           int repaired, long durationMs, String message) {
+            this(lastRunAt, status, adCount, alerted, repaired, durationMs, message, List.of());
+        }
     }
 }

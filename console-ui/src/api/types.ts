@@ -170,6 +170,15 @@ export interface DltReplayStats {
   skippedExhausted: number
 }
 
+export interface ReconMismatch {
+  adId: number
+  redisCents: number
+  dbCents: number
+  diffCents: number
+  direction: string
+  action: string
+}
+
 export interface ReconReport {
   lastRunAt: string
   status: string
@@ -178,6 +187,7 @@ export interface ReconReport {
   repaired: number
   durationMs: number
   message: string | null
+  mismatches: ReconMismatch[]
 }
 
 export interface DataView {
