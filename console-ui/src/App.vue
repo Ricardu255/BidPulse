@@ -36,7 +36,7 @@ const helpVisible = ref(false)
       </el-menu>
 
       <div class="sidebar-foot">
-        <span>P3</span>
+        <span>DEMO</span>
         <p>首页 · 模拟 · 投放 · 监控 · 查询 · 开关</p>
       </div>
     </el-aside>

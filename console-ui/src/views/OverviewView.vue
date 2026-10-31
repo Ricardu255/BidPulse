@@ -66,6 +66,16 @@ function healthLabel(key: string): string {
   return labels[key] ?? key
 }
 
+function healthText(value: string): string {
+  if (value === 'UP') return '正常'
+  if (value === 'DOWN' || value === 'OUT_OF_SERVICE') return '异常'
+  if (value === 'CLOSED') return '正常'
+  if (value === 'OPEN') return '熔断中'
+  if (value === 'HALF_OPEN') return '半开恢复'
+  if (value === 'SENTINEL') return '框架托管'
+  return value
+}
+
 function healthType(value: string): 'success' | 'warning' | 'danger' | 'info' {
   if (value === 'UP' || value === 'CLOSED') return 'success'
   if (value === 'HALF_OPEN') return 'warning'
@@ -204,7 +214,7 @@ onUnmounted(stopTimer)
           <div class="health-strip">
             <div v-for="item in healthItems" :key="item.key" class="health-chip">
               <span class="health-name">{{ item.label }}</span>
-              <el-tag :type="healthType(item.value)" size="small">{{ item.value }}</el-tag>
+              <el-tag :type="healthType(item.value)" size="small">{{ healthText(item.value) }}</el-tag>
             </div>
             <el-empty v-if="!healthItems.length" description="暂无健康数据" :image-size="60" />
           </div>

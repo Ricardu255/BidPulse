@@ -49,7 +49,7 @@ test('ops page switches between group, DLT and recon tabs', async ({ page }) => 
   await expect(page.getByText('billing-recon', { exact: true }).first()).toBeVisible()
 
   await page.getByRole('tab', { name: 'DLT 重放' }).click()
-  await expect(page.getByText('批量重放')).toBeVisible()
+  await expect(page.getByRole('button', { name: '批量重放' })).toBeVisible()
 
   await page.getByRole('tab', { name: '预算对账' }).click()
   await expect(page.getByText('立即对账')).toBeVisible()

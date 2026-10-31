@@ -31,9 +31,14 @@ const resultTitle = computed(() => {
   return last.value.hasAd ? '竞价成功' : '无广告'
 })
 
-const modeLabel = computed(() => priceModeLabel(last.value?.priceMode))
+const modeLabel = computed(() => {
+  if (!last.value) return ''
+  if (!last.value.hasAd) return '无广告'
+  return priceModeLabel(last.value.priceMode)
+})
 type TagType = 'success' | 'warning' | 'info'
 const modeTagType = computed<TagType>(() => {
+  if (last.value && !last.value.hasAd) return 'info'
   if (last.value?.priceMode === 1) return 'success'
   if (last.value?.priceMode === 2) return 'warning'
   return 'info'

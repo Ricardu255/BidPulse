@@ -169,6 +169,7 @@ onUnmounted(stopTimer)
 
     <el-card class="panel" shadow="never">
       <div class="filters">
+        <span class="filter-label">广告 ID</span>
         <el-input-number
           v-model="session.adId"
           :min="1"
@@ -177,6 +178,7 @@ onUnmounted(stopTimer)
           controls-position="right"
           @change="onFilterChange"
         />
+        <span class="filter-label">用户 ID</span>
         <el-input
           v-model="session.userId"
           placeholder="userId（可空，匿名不控频）"
