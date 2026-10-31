@@ -356,6 +356,12 @@ body {
   margin-bottom: 14px;
 }
 
+.filter-label {
+  color: var(--bp-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;

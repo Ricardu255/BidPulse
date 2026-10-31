@@ -86,8 +86,12 @@ onMounted(load)
         <el-select v-model="table" style="width: 230px" @change="load">
           <el-option v-for="item in tables" :key="item.value" :value="item.value" :label="item.label" />
         </el-select>
+        <span class="filter-label">查询行数</span>
         <el-input-number v-model="limit" :min="1" :max="200" :precision="0" :step="10" controls-position="right" />
-        <el-input-number v-model="adId" :min="1" placeholder="adId（可空）" controls-position="right" />
+        <template v-if="table !== 'processed_event'">
+          <span class="filter-label">广告 ID</span>
+          <el-input-number v-model="adId" :min="1" placeholder="adId（可空）" controls-position="right" />
+        </template>
         <el-input
           v-if="table === 'bid_log'"
           v-model="requestId"

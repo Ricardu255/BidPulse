@@ -55,6 +55,25 @@ function outcomeLabel(outcome: string): string {
   return outcome
 }
 
+function reconStatusLabel(status: string | undefined): string {
+  if (status === 'OK') return '正常'
+  if (status === 'FAILED') return '失败'
+  return status || '未知'
+}
+
+function directionLabel(direction: string): string {
+  if (direction === 'REDIS_AHEAD') return 'Redis 多记'
+  if (direction === 'DB_AHEAD') return 'Redis 少记'
+  return direction
+}
+
+function actionLabel(action: string): string {
+  if (action === 'REPAIRED') return '已修复'
+  if (action === 'ALERT') return '已告警'
+  if (action === 'SKIPPED') return '已跳过'
+  return action
+}
+
 function reconType(status: string | undefined): 'success' | 'danger' | 'info' {
   if (status === 'OK') return 'success'
   if (status === 'FAILED') return 'danger'
@@ -276,9 +295,11 @@ onUnmounted(stopTimer)
         <el-card class="panel" shadow="never">
           <div class="filters">
             <span class="hint">最近 DLT 消息（含已处理/已跳过）</span>
-            <el-input-number v-model="dltLimit" :min="1" :max="50" size="small" />
+            <span class="filter-label">拉取条数</span>
+            <el-input-number v-model="dltLimit" :min="1" :max="50" :precision="0" size="small" />
             <el-button size="small" :loading="dltLoading" @click="refreshDlt">刷新</el-button>
-            <el-input-number v-model="replayMax" :min="1" :max="1000" size="small" />
+            <span class="filter-label">批量重放上限</span>
+            <el-input-number v-model="replayMax" :min="1" :max="1000" :precision="0" size="small" />
             <el-button size="small" type="warning" plain :loading="replaying" @click="triggerReplay">
               批量重放
             </el-button>
@@ -357,7 +378,7 @@ onUnmounted(stopTimer)
             <div class="metric">
               <span>最近执行</span>
               <strong class="recon-time">{{ recon.lastRunAt }}</strong>
-              <small>状态 <el-tag :type="reconType(recon.status)" size="small">{{ recon.status }}</el-tag></small>
+              <small>状态 <el-tag :type="reconType(recon.status)" size="small">{{ reconStatusLabel(recon.status) }}</el-tag></small>
             </div>
             <div class="metric">
               <span>对账广告数</span>
@@ -394,7 +415,7 @@ onUnmounted(stopTimer)
               <el-table-column prop="adId" label="adId" width="100" />
               <el-table-column label="方向" width="130">
                 <template #default="{ row }">
-                  <el-tag :type="directionType(row.direction)" size="small">{{ row.direction }}</el-tag>
+                  <el-tag :type="directionType(row.direction)" size="small">{{ directionLabel(row.direction) }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="Redis" width="120">
@@ -408,7 +429,7 @@ onUnmounted(stopTimer)
               </el-table-column>
               <el-table-column label="处理" width="120">
                 <template #default="{ row }">
-                  <el-tag :type="actionType(row.action)" size="small">{{ row.action }}</el-tag>
+                  <el-tag :type="actionType(row.action)" size="small">{{ actionLabel(row.action) }}</el-tag>
                 </template>
               </el-table-column>
             </el-table>

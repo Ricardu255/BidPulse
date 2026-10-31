@@ -6,6 +6,7 @@ import type { ExperimentsView } from '@/api/types'
 import { errorText } from '@/format'
 
 const experiments = ref<ExperimentsView | null>(null)
+const saved = ref<ExperimentsView | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 
@@ -13,6 +14,7 @@ async function load(): Promise<void> {
   loading.value = true
   try {
     experiments.value = await getExperiments()
+    saved.value = { ...experiments.value }
   } catch (e) {
     ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
@@ -22,7 +24,8 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!experiments.value) return
-  const previous = { ...experiments.value }
+  // 上一次服务端确认值；不能用当前（已被用户改过的）值做回滚快照
+  const previous = saved.value ? { ...saved.value } : { ...experiments.value }
   try {
     if (!experiments.value.fallbackEnabled || experiments.value.fallbackForce) {
       await ElMessageBox.confirm(
@@ -38,10 +41,11 @@ async function save(): Promise<void> {
       frequencyEnabled: experiments.value.frequencyEnabled,
       frequencyMaxPerHour: experiments.value.frequencyMaxPerHour,
     })
+    saved.value = { ...experiments.value }
     ElMessage.success('实验开关已更新，下一次请求立即生效')
   } catch (e) {
-    if (e === 'cancel' || e === 'close') return
     experiments.value = previous
+    if (e === 'cancel' || e === 'close') return
     ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
     saving.value = false
