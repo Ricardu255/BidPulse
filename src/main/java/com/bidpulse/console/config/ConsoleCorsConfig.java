@@ -33,7 +33,7 @@ public class ConsoleCorsConfig implements WebMvcConfigurer {
                 .toArray(String[]::new);
         registry.addMapping("/console-api/**")
                 .allowedOrigins(origins)
-                .allowedMethods("GET", "POST", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
     }
 }

@@ -5,6 +5,7 @@ import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.console.dto.DltMessageView;
 import com.bidpulse.console.query.DltQueryService;
+import com.bidpulse.console.query.DltReplayAdminService;
 import com.bidpulse.job.BudgetReconJob;
 import com.bidpulse.job.DltReplayJob;
 import com.bidpulse.job.ReconReportStore;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 控制台异步运维：DLT 浏览/重放、预算对账状态与手动触发。
@@ -28,6 +30,7 @@ import java.util.List;
 public class ConsoleOpsController {
 
     private final DltQueryService dltQueryService;
+    private final DltReplayAdminService dltReplayAdminService;
     private final DltReplayJob dltReplayJob;
     private final BudgetReconJob budgetReconJob;
     private final ReconReportStore reconReportStore;
@@ -51,6 +54,20 @@ public class ConsoleOpsController {
         } catch (Exception e) {
             throw BizException.unavailable("DLT 重放失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 单条重放：返回投递结果；DLT 原记录保留，不推进定时任务位点。
+     */
+    @PostMapping("/dlt/replay-one")
+    public ApiResponse<Map<String, Object>> replayOne(@RequestParam int partition,
+                                                      @RequestParam long offset) {
+        requireWrite();
+        DltReplayJob.ReplayOutcome outcome = dltReplayAdminService.replayOne(partition, offset);
+        return ApiResponse.ok(Map.of(
+                "partition", partition,
+                "offset", offset,
+                "outcome", outcome.name()));
     }
 
     @GetMapping("/recon")

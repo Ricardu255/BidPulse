@@ -43,6 +43,7 @@ public class ConsoleOverviewService {
     private final JdbcTemplate jdbc;
     private final KafkaLagQueryService kafkaLagQueryService;
     private final HealthEndpoint healthEndpoint;
+    private final BreakerStatusProvider breakerStatusProvider;
 
     public OverviewView overview() {
         long[] bids = bidCounts();
@@ -70,13 +71,16 @@ public class ConsoleOverviewService {
             kafkaLag = -1;
         }
 
+        Map<String, String> health = health();
+        health.putAll(breakerStatusProvider.states());
+
         return new OverviewView(
                 bids[0], bids[1], fallbackRate,
                 spend == null ? BigDecimal.ZERO : spend,
                 p95,
                 ads[0], ads[1], ads[2], ads[3],
                 kafkaLag,
-                health(),
+                health,
                 trend);
     }
 

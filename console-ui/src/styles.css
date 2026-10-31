@@ -104,6 +104,13 @@ body {
   background: transparent !important;
 }
 
+.nav .el-menu-item-group__title {
+  padding: 10px 24px 4px !important;
+  color: #9ab0c2;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
 .nav .el-menu-item {
   height: 44px;
   margin: 4px 12px;
@@ -157,6 +164,12 @@ body {
   background: rgba(255, 253, 248, 0.82);
   border-bottom: 1px solid var(--bp-line);
   backdrop-filter: blur(12px);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .topbar-title {
@@ -436,6 +449,11 @@ body {
 
 .health-name {
   color: var(--bp-ink-soft);
+  white-space: nowrap;
+}
+
+.health-chip .el-tag {
+  flex: 0 0 auto;
 }
 
 .trend {
@@ -469,6 +487,93 @@ body {
   color: var(--bp-muted);
   font-size: 10px;
   white-space: nowrap;
+}
+
+/* ---------- 结果分布 donut ---------- */
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 150px;
+}
+
+.donut {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  flex: 0 0 118px;
+  border-radius: 50%;
+}
+
+.donut::after {
+  content: "";
+  position: absolute;
+  inset: 22px;
+  border-radius: 50%;
+  background: var(--bp-panel);
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--bp-ink);
+}
+
+.donut-center strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.donut-center small {
+  margin-top: 5px;
+  color: var(--bp-muted);
+  font-size: 10px;
+}
+
+.legend {
+  display: grid;
+  gap: 8px;
+  color: var(--bp-ink-soft);
+  font-size: 12px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+}
+
+.legend-dot.win {
+  background: #5b83a6;
+}
+
+.legend-dot.fallback {
+  background: #b9853c;
+}
+
+.legend-dot.empty {
+  background: #c9d9e6;
+}
+
+/* ---------- 运维页签 ---------- */
+.ops-tabs .el-tabs__header {
+  margin-bottom: 18px;
+}
+
+.ops-tabs .el-tabs__nav-wrap::after {
+  height: 1px;
+  background-color: var(--bp-line);
+}
+
+.recon-time {
+  font-size: 16px !important;
 }
 
 /* ---------- 广告列表 / 抽屉 ---------- */
@@ -667,4 +772,100 @@ body {
   .page-header {
     flex-direction: column;
   }
+}
+
+
+/* ---------- 权限/异常提示 ---------- */
+.not-found p {
+  margin: 6px 0 10px;
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.not-found .el-button + .el-button {
+  margin-left: 8px;
+}
+
+/* ---------- 使用说明 ---------- */
+.help-body {
+  color: var(--bp-ink-soft);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.help-lead {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--bp-cream), #f4f9fc);
+  color: var(--bp-ink-soft);
+}
+
+.help-section {
+  margin-bottom: 18px;
+}
+
+.help-section h3 {
+  margin: 0 0 6px;
+  color: var(--bp-ink);
+  font-size: 15px;
+}
+
+.help-section p {
+  margin: 0;
+  color: var(--bp-muted);
+}
+
+.help-steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--bp-ink-soft);
+}
+
+
+/* ---------- 首页快捷入口 ---------- */
+.quick-start-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.quick-start-inner strong {
+  color: var(--bp-ink);
+  font-size: 15px;
+}
+
+.quick-start-inner p {
+  margin: 6px 0 0;
+  color: var(--bp-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .quick-start-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
+.help-glossary {
+  margin: 0;
+}
+
+.help-glossary dt {
+  margin-top: 10px;
+  color: var(--bp-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.help-glossary dd {
+  margin: 3px 0 0;
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.7;
 }

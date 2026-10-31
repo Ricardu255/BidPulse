@@ -21,6 +21,7 @@ import type {
   RecentBidView,
   ReconReport,
 } from './types'
+import { ApiError } from './client'
 
 const CANDIDATES: AdInfo[] = [
   { adId: 110, advertiserId: 11, title: '创意标题-110', categoryCode: 'travel', bid: 1.5 },
@@ -63,6 +64,9 @@ export async function mockRunBid(payload: BidRequest): Promise<{ result: BidResu
 
 export async function mockBudget(adId: number): Promise<BudgetView> {
   await delay(120)
+  if (!MOCK_ADS.some((ad) => ad.id === adId)) {
+    throw new ApiError(`广告不存在: ${adId}`, 404)
+  }
   return {
     adId,
     title: `创意标题-${adId}`,
@@ -78,6 +82,9 @@ export async function mockBudget(adId: number): Promise<BudgetView> {
 
 export async function mockFrequency(adId: number, userId?: string): Promise<FrequencyView> {
   await delay(120)
+  if (!MOCK_ADS.some((ad) => ad.id === adId)) {
+    throw new ApiError(`广告不存在: ${adId}`, 404)
+  }
   const hasUser = Boolean(userId?.trim())
   return {
     userId: userId ?? null,
@@ -284,6 +291,24 @@ let mockReconReport: ReconReport = {
   repaired: 2,
   durationMs: 340,
   message: null,
+  mismatches: [
+    {
+      adId: 110,
+      redisCents: 303,
+      dbCents: 202,
+      diffCents: 101,
+      direction: 'REDIS_AHEAD',
+      action: 'ALERT',
+    },
+    {
+      adId: 106,
+      redisCents: 100,
+      dbCents: 200,
+      diffCents: -100,
+      direction: 'DB_AHEAD',
+      action: 'REPAIRED',
+    },
+  ],
 }
 
 export async function mockDltMessages(limit = 20): Promise<DltMessageView[]> {
@@ -312,6 +337,14 @@ export async function mockReplayDlt(maxRecords: number): Promise<DltReplayStats>
   await delay(300)
   const replayed = Math.min(maxRecords, 3)
   return { replayed, skippedInvalid: 1, skippedExhausted: 1 }
+}
+
+export async function mockReplayDltOne(
+  partition: number,
+  offset: number,
+): Promise<{ partition: number; offset: number; outcome: string }> {
+  await delay(250)
+  return { partition, offset, outcome: 'REPLAYED' }
 }
 
 export async function mockRecon(): Promise<ReconReport> {

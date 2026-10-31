@@ -45,8 +45,8 @@ onMounted(load)
   <div class="page">
     <header class="page-header">
       <div>
-        <h1>实验与开关</h1>
-        <p>运行时开关：兜底、频次上限。只暴露可以即时生效、不会破坏数据一致性的配置。</p>
+        <h1>演示开关</h1>
+        <p>演示故障和策略变化：兜底、强制兜底、频次开关；会影响下一次请求。</p>
       </div>
       <el-tag type="info" effect="plain">GET /console-api/v1/experiments</el-tag>
     </header>

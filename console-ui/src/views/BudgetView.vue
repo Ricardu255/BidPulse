@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { getBudget, getFrequency } from '@/api/console'
+import { ApiError } from '@/api/client'
 import type { BudgetView, FrequencyView } from '@/api/types'
 import { cents, errorText, money, percent, ttlLabel } from '@/format'
 import { session } from '@/session'
 
 type TagType = 'success' | 'warning' | 'danger' | 'info'
 
+const router = useRouter()
 const budget = ref<BudgetView | null>(null)
 const frequency = ref<FrequencyView | null>(null)
 const loading = ref(false)
+const notFound = ref(false)
 const auto = ref(true)
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -58,8 +62,8 @@ const statusType = computed<TagType>(() => {
   }
 })
 
-async function refresh(): Promise<void> {
-  if (!session.adId) return
+async function refresh(force = false): Promise<void> {
+  if (!session.adId || (!force && notFound.value)) return
   loading.value = true
   try {
     const [budgetView, frequencyView] = await Promise.all([
@@ -68,11 +72,35 @@ async function refresh(): Promise<void> {
     ])
     budget.value = budgetView
     frequency.value = frequencyView
+    notFound.value = false
   } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      // adId 不存在（常见：从兜底广告 999999 或已删除广告带过来）。
+      // 不循环弹 toast，改成页面内提示，用户改 adId 后自动重试。
+      notFound.value = true
+      budget.value = null
+      frequency.value = null
+      return
+    }
     ElMessage.error(errorText(e))
   } finally {
     loading.value = false
   }
+}
+
+function onFilterChange(): void {
+  notFound.value = false
+  refresh(true)
+}
+
+function useDefaultAd(): void {
+  session.adId = 110
+  localStorage.setItem('bidpulse.console.adId', '110')
+  onFilterChange()
+}
+
+function openAds(): void {
+  router.push('/ads')
 }
 
 function stopTimer(): void {
@@ -104,7 +132,7 @@ onUnmounted(stopTimer)
     <header class="page-header">
       <div>
         <h1>预算与频次</h1>
-        <p>直接读取 Redis 的当日预算与当前小时频次；只读查询，不会播种或修改任何 key。</p>
+        <p>查某个广告今天还剩多少钱、某个用户今天已经看过几次；只读，不会修改预算。</p>
       </div>
       <el-tag type="info" effect="plain">GET /console-api/v1/budget · /frequency</el-tag>
     </header>
@@ -115,19 +143,28 @@ onUnmounted(stopTimer)
           v-model="session.adId"
           :min="1"
           controls-position="right"
-          @change="refresh"
+          @change="onFilterChange"
         />
         <el-input
           v-model="session.userId"
           placeholder="userId（可空，匿名不控频）"
           clearable
-          @change="refresh"
+          @change="onFilterChange"
         />
-        <el-button :loading="loading" @click="refresh">刷新</el-button>
+        <el-button :loading="loading" @click="refresh(true)">刷新</el-button>
         <el-switch v-model="auto" active-text="自动刷新" />
         <span class="hint">竞价后会自动带入最近一次胜出广告与 userId。</span>
       </div>
     </el-card>
+
+    <el-alert v-if="notFound" type="warning" :closable="false" show-icon class="panel">
+      <template #title>没有找到这个广告</template>
+      <div class="not-found">
+        <p>adId 必须存在于 ad 表；兜底广告 999999 不在表中，已删除的广告也查不到。</p>
+        <el-button size="small" type="primary" @click="useDefaultAd">使用广告 110</el-button>
+        <el-button size="small" @click="openAds">打开广告列表</el-button>
+      </div>
+    </el-alert>
 
     <div v-if="budget" class="metric-grid six">
       <div class="metric">

@@ -15,6 +15,7 @@ import {
   mockRecentBids,
   mockRecon,
   mockReplayDlt,
+  mockReplayDltOne,
   mockResume,
   mockRunBid,
   mockRunRecon,
@@ -177,6 +178,17 @@ export function replayDlt(maxRecords = 100): Promise<DltReplayStats> {
   if (USE_MOCK) return mockReplayDlt(maxRecords)
   return request<DltReplayStats>(
     `/dlt/replay?maxRecords=${encodeURIComponent(String(maxRecords))}`,
+    { method: 'POST' },
+  )
+}
+
+export function replayDltOne(
+  partition: number,
+  offset: number,
+): Promise<{ partition: number; offset: number; outcome: string }> {
+  if (USE_MOCK) return mockReplayDltOne(partition, offset)
+  return request<{ partition: number; offset: number; outcome: string }>(
+    `/dlt/replay-one?partition=${partition}&offset=${offset}`,
     { method: 'POST' },
   )
 }

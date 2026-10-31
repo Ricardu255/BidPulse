@@ -8,17 +8,17 @@ const router = createRouter({
     {
       path: '/overview',
       component: () => import('@/views/OverviewView.vue'),
-      meta: { title: '概览' },
+      meta: { title: '首页' },
     },
     {
       path: '/playground',
       component: () => import('@/views/PlaygroundView.vue'),
-      meta: { title: '竞价实验室' },
+      meta: { title: '模拟竞价' },
     },
     {
       path: '/ads',
       component: () => import('@/views/AdsView.vue'),
-      meta: { title: '广告与投放' },
+      meta: { title: '广告管理' },
     },
     {
       path: '/budget',
@@ -28,17 +28,17 @@ const router = createRouter({
     {
       path: '/ops',
       component: () => import('@/views/OpsView.vue'),
-      meta: { title: '异步运维' },
+      meta: { title: '运行监控' },
     },
     {
       path: '/data',
       component: () => import('@/views/DataView.vue'),
-      meta: { title: '数据浏览' },
+      meta: { title: '数据查询' },
     },
     {
       path: '/experiments',
       component: () => import('@/views/ExperimentsView.vue'),
-      meta: { title: '实验与开关' },
+      meta: { title: '演示开关' },
     },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
