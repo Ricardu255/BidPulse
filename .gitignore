@@ -6,6 +6,7 @@
 !/src/
 !/tools/
 !/console-ui/
+!/docs/
 # .github 必须放行，否则 CI workflow（ci.yml）推不上 GitHub、永不触发
 !/.github/
 
@@ -30,3 +31,4 @@ src/main/resources/static/console/
 *.gif
 *.webp
 *.bmp
+!docs/images/*.png
