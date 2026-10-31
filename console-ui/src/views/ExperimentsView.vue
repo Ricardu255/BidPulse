@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getExperiments, updateExperiments } from '@/api/console'
 import type { ExperimentsView } from '@/api/types'
 import { errorText } from '@/format'
@@ -14,7 +14,7 @@ async function load(): Promise<void> {
   try {
     experiments.value = await getExperiments()
   } catch (e) {
-    ElMessage.error(errorText(e))
+    ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
     loading.value = false
   }
@@ -22,8 +22,16 @@ async function load(): Promise<void> {
 
 async function save(): Promise<void> {
   if (!experiments.value) return
-  saving.value = true
+  const previous = { ...experiments.value }
   try {
+    if (!experiments.value.fallbackEnabled || experiments.value.fallbackForce) {
+      await ElMessageBox.confirm(
+        '关闭兜底或强制兜底会显著改变竞价结果，确定保存？',
+        '确认高风险开关',
+        { type: 'warning', confirmButtonText: '保存', cancelButtonText: '取消' },
+      )
+    }
+    saving.value = true
     experiments.value = await updateExperiments({
       fallbackEnabled: experiments.value.fallbackEnabled,
       fallbackForce: experiments.value.fallbackForce,
@@ -32,7 +40,9 @@ async function save(): Promise<void> {
     })
     ElMessage.success('实验开关已更新，下一次请求立即生效')
   } catch (e) {
-    ElMessage.error(errorText(e))
+    if (e === 'cancel' || e === 'close') return
+    experiments.value = previous
+    ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
     saving.value = false
   }
@@ -55,7 +65,7 @@ onMounted(load)
       <template #header>
         <div class="card-head">
           <span>运行时配置</span>
-          <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+          <el-button type="primary" :loading="saving" :disabled="!experiments.consoleAllowWrite" @click="save">保存</el-button>
         </div>
       </template>
 
@@ -82,7 +92,7 @@ onMounted(load)
             <strong>兜底开关</strong>
             <p class="hint">关闭后不会返回兜底广告，用于复现旧实现。</p>
           </div>
-          <el-switch v-model="experiments.fallbackEnabled" />
+          <el-switch v-model="experiments.fallbackEnabled" :disabled="!experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -90,7 +100,7 @@ onMounted(load)
             <strong>强制兜底</strong>
             <p class="hint">开启后每次都走兜底，用于模拟依赖全面故障。</p>
           </div>
-          <el-switch v-model="experiments.fallbackForce" />
+          <el-switch v-model="experiments.fallbackForce" :disabled="!experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -98,7 +108,7 @@ onMounted(load)
             <strong>实时频次控制</strong>
             <p class="hint">关闭后不读写频次 key，匿名与登录请求都不控频。</p>
           </div>
-          <el-switch v-model="experiments.frequencyEnabled" />
+          <el-switch v-model="experiments.frequencyEnabled" :disabled="!experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -108,6 +118,7 @@ onMounted(load)
           </div>
           <el-input-number
             v-model="experiments.frequencyMaxPerHour"
+            :disabled="!experiments.consoleAllowWrite"
             :min="1"
             :max="100"
             controls-position="right"

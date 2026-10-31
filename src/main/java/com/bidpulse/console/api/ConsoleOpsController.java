@@ -79,8 +79,7 @@ public class ConsoleOpsController {
     public ApiResponse<ReconReportStore.ReconReport> runRecon() {
         requireWrite();
         try {
-            budgetReconJob.runOnce();
-            return ApiResponse.ok(reconReportStore.last());
+            return ApiResponse.ok(budgetReconJob.runOnce());
         } catch (Exception e) {
             throw BizException.unavailable("预算对账失败: " + e.getMessage());
         }

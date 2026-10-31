@@ -72,9 +72,17 @@ public class DltQueryService {
                     .map(info -> new TopicPartition(info.topic(), info.partition()))
                     .toList();
             consumer.assign(partitions);
-            consumer.seekToBeginning(partitions);
+            Map<TopicPartition, Long> beginningOffsets = consumer.beginningOffsets(partitions);
             Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
-            Map<TopicPartition, Long> replayedOffsets = replayedOffsets(partitions);
+            Map<TopicPartition, Long> committedOffsets = committedOffsets();
+
+            // 从每个分区尾部往前取最近 cap 条：既能看到新积压，也能看到被批量任务跳过的旧消息。
+            for (TopicPartition tp : partitions) {
+                long begin = beginningOffsets.getOrDefault(tp, 0L);
+                long end = endOffsets.getOrDefault(tp, begin);
+                long start = Math.max(begin, end - Math.max(1, cap));
+                consumer.seek(tp, start);
+            }
 
             List<DltMessageView> out = new ArrayList<>(cap);
             long deadline = System.currentTimeMillis() + BROWSE_BUDGET_MS;
@@ -86,13 +94,11 @@ public class DltQueryService {
                 for (ConsumerRecord<String, String> record : records) {
                     TopicPartition tp = new TopicPartition(record.topic(), record.partition());
                     long end = endOffsets.getOrDefault(tp, record.offset() + 1);
-                    long replayedUpTo = replayedOffsets.getOrDefault(tp, 0L);
-                    // 只展示“待处理”的 DLT 记录：重放任务已提交位点之前的记录仍然在 Kafka 日志里，
-                    // 但对控制台来说已经处理过，不应继续显示。
-                    if (record.offset() >= end || record.offset() < replayedUpTo) {
+                    if (record.offset() >= end) {
                         continue;
                     }
-                    out.add(toView(record));
+                    long committed = committedOffsets.getOrDefault(tp, 0L);
+                    out.add(toView(record, record.offset() < committed));
                     if (out.size() >= cap) {
                         break;
                     }
@@ -106,7 +112,7 @@ public class DltQueryService {
     }
 
     /** 读取 dlt-replay 消费组的已提交位点；查询失败时按 0 处理，至少不隐藏消息。 */
-    private Map<TopicPartition, Long> replayedOffsets(List<TopicPartition> partitions) {
+    private Map<TopicPartition, Long> committedOffsets() {
         Map<TopicPartition, Long> out = new HashMap<>();
         try {
             Map<TopicPartition, OffsetAndMetadata> committed = admin
@@ -120,7 +126,7 @@ public class DltQueryService {
         return out;
     }
 
-    private DltMessageView toView(ConsumerRecord<String, String> record) {
+    private DltMessageView toView(ConsumerRecord<String, String> record, boolean processed) {
         Map<String, String> headers = new LinkedHashMap<>();
         if (record.headers() != null) {
             for (Header header : record.headers()) {
@@ -140,7 +146,7 @@ public class DltQueryService {
                 : null;
         return new DltMessageView(
                 record.topic(), record.partition(), record.offset(),
-                record.key(), value, replayCount, timestamp, headers);
+                record.key(), value, replayCount, processed, timestamp, headers);
     }
 
     private static String formatTime(long epochMillis) {

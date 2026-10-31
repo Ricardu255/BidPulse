@@ -33,6 +33,11 @@ public class ConsoleExperimentsController {
     @PutMapping
     public ApiResponse<ExperimentsView> update(@RequestBody ExperimentsUpdate update) {
         requireWrite();
+        // 先校验所有字段，再统一应用，避免“前面的开关已改、后面的字段校验失败”的半更新。
+        Integer max = update.frequencyMaxPerHour();
+        if (max != null && (max < 1 || max > 100)) {
+            throw BizException.badRequest("frequencyMaxPerHour 应在 1~100 之间");
+        }
         if (update.fallbackEnabled() != null) {
             props.getFallback().setEnabled(update.fallbackEnabled());
         }
@@ -42,11 +47,7 @@ public class ConsoleExperimentsController {
         if (update.frequencyEnabled() != null) {
             props.getFrequency().setEnabled(update.frequencyEnabled());
         }
-        if (update.frequencyMaxPerHour() != null) {
-            int max = update.frequencyMaxPerHour();
-            if (max < 1 || max > 100) {
-                throw BizException.badRequest("frequencyMaxPerHour 应在 1~100 之间");
-            }
+        if (max != null) {
             props.getFrequency().setMaxPerHour(max);
         }
         return ApiResponse.ok(snapshot());

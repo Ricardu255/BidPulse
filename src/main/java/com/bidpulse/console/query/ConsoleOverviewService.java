@@ -12,6 +12,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -46,21 +49,25 @@ public class ConsoleOverviewService {
     private final BreakerStatusProvider breakerStatusProvider;
 
     public OverviewView overview() {
-        long[] bids = bidCounts();
+        // 统一用 JVM 本地时区计算窗口，避免 MySQL 容器 UTC 与宿主 Asia/Shanghai 混用。
+        ZoneId zone = ZoneId.systemDefault();
+        LocalDateTime dayStart = LocalDate.now(zone).atStartOfDay();
+        long dayStartEpochMillis = dayStart.atZone(zone).toInstant().toEpochMilli();
+
+        long[] bids = bidCounts(dayStart);
         long[] ads = adCounts();
         BigDecimal spend = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(pay_price), 0) FROM billing_event "
-                        + "WHERE ts >= UNIX_TIMESTAMP(CURDATE()) * 1000",
-                BigDecimal.class);
-        long p95 = p95CostMs();
+                "SELECT COALESCE(SUM(pay_price), 0) FROM billing_event WHERE ts >= ?",
+                BigDecimal.class, dayStartEpochMillis);
+        long p95 = p95CostMs(dayStart);
 
         List<TrendPoint> trend = jdbc.query(
                 "SELECT DATE_FORMAT(bid_at, '%H:%i') AS minute, COUNT(*) AS bids, "
                         + "COALESCE(SUM(CASE WHEN ad_id = ? THEN 1 ELSE 0 END), 0) AS fallback "
-                        + "FROM bid_log WHERE bid_at >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) "
+                        + "FROM bid_log WHERE bid_at >= ? "
                         + "GROUP BY DATE_FORMAT(bid_at, '%H:%i') ORDER BY MIN(bid_at)",
                 (rs, i) -> new TrendPoint(rs.getString("minute"), rs.getLong("bids"), rs.getLong("fallback")),
-                FALLBACK_AD_ID);
+                FALLBACK_AD_ID, LocalDateTime.now(zone).minusMinutes(30));
 
         double fallbackRate = bids[0] == 0 ? 0.0 : (double) bids[1] / bids[0];
         long kafkaLag;
@@ -104,13 +111,13 @@ public class ConsoleOverviewService {
                 cap);
     }
 
-    private long[] bidCounts() {
+    private long[] bidCounts(LocalDateTime dayStart) {
         return jdbc.queryForObject(
                 "SELECT COUNT(*) AS total, "
                         + "COALESCE(SUM(CASE WHEN ad_id = ? THEN 1 ELSE 0 END), 0) AS fallback "
-                        + "FROM bid_log WHERE bid_at >= CURDATE()",
+                        + "FROM bid_log WHERE bid_at >= ?",
                 (rs, i) -> new long[]{rs.getLong("total"), rs.getLong("fallback")},
-                FALLBACK_AD_ID);
+                FALLBACK_AD_ID, dayStart);
     }
 
     private long[] adCounts() {
@@ -126,10 +133,10 @@ public class ConsoleOverviewService {
     }
 
     /** 取今日最近 1000 条耗时的 p95；没有数据返回 0。 */
-    private long p95CostMs() {
+    private long p95CostMs(LocalDateTime dayStart) {
         List<Integer> costs = jdbc.queryForList(
-                "SELECT cost_ms FROM bid_log WHERE bid_at >= CURDATE() ORDER BY id DESC LIMIT 1000",
-                Integer.class);
+                "SELECT cost_ms FROM bid_log WHERE bid_at >= ? ORDER BY id DESC LIMIT 1000",
+                Integer.class, dayStart);
         if (costs.isEmpty()) {
             return 0;
         }

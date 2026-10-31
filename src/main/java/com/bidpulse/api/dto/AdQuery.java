@@ -28,8 +28,9 @@ public class AdQuery {
     /** 标题模糊匹配 */
     private String titleLike;
 
-    /** 页码，从 1 开始 */
+    /** 页码，从 1 开始；限制上界，避免 OFFSET 溢出或深翻页拖垮数据库 */
     @Min(value = 1, message = "应不小于 1")
+    @Max(value = 1_000_000, message = "页码不能超过 1000000")
     private Integer pageNum = 1;
 
     /** 每页条数，上限 200，避免一次拉爆内存 */
@@ -49,8 +50,8 @@ public class AdQuery {
     }
 
     /** 供 SQL 使用：LIMIT 偏移量 */
-    public int getOffset() {
-        return (safePageNum() - 1) * safePageSize();
+    public long getOffset() {
+        return (long) (safePageNum() - 1) * safePageSize();
     }
 
     /** 供 SQL 使用：LIMIT 条数 */

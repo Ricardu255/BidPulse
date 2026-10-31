@@ -9,6 +9,7 @@ import { errorText, money } from '@/format'
 const router = useRouter()
 const overview = ref<OverviewView | null>(null)
 const recent = ref<RecentBidView[]>([])
+const recentAll = ref<RecentBidView[]>([])
 const loading = ref(false)
 const auto = ref(true)
 const recentDrawer = ref(false)
@@ -86,6 +87,19 @@ function shortId(value: string): string {
   return value.length > 12 ? `${value.slice(0, 12)}…` : value
 }
 
+function notifyError(e: unknown): void {
+  ElMessage({ message: errorText(e), type: 'error', grouping: true })
+}
+
+async function openRecent(): Promise<void> {
+  recentDrawer.value = true
+  try {
+    recentAll.value = await getRecentBids(50)
+  } catch (e) {
+    notifyError(e)
+  }
+}
+
 async function refresh(): Promise<void> {
   loading.value = true
   try {
@@ -93,7 +107,7 @@ async function refresh(): Promise<void> {
     overview.value = overviewView
     recent.value = recentRows
   } catch (e) {
-    ElMessage.error(errorText(e))
+    notifyError(e)
   } finally {
     loading.value = false
   }
@@ -219,14 +233,16 @@ onUnmounted(stopTimer)
       <el-col :xs="24" :md="10">
         <el-card class="panel" shadow="never">
           <template #header>近 30 分钟请求趋势</template>
-          <div v-if="overview?.trend.length" class="trend">
-            <div v-for="point in overview.trend" :key="point.minute" class="trend-col">
+          <div v-if="overview?.trend?.length" class="trend">
+            <div v-for="(point, index) in overview?.trend ?? []" :key="point.minute" class="trend-col">
               <div
                 class="trend-bar"
                 :style="{ height: `${barHeight(point.bids)}px` }"
                 :title="`${point.minute} · ${point.bids} 次 · 兜底 ${point.fallback}`"
               ></div>
-              <span class="trend-label">{{ point.minute }}</span>
+              <span v-if="index % 5 === 0 || index === (overview?.trend?.length ?? 0) - 1" class="trend-label">
+                {{ point.minute }}
+              </span>
             </div>
           </div>
           <el-empty v-else description="近 30 分钟暂无竞价数据" :image-size="60" />
@@ -238,7 +254,7 @@ onUnmounted(stopTimer)
       <template #header>
         <div class="card-head">
           <span>最近竞价</span>
-          <el-button size="small" @click="recentDrawer = true">查看全部</el-button>
+          <el-button size="small" @click="openRecent">查看最近 50 条</el-button>
         </div>
       </template>
       <el-table :data="recent.slice(0, 5)" stripe size="small">
@@ -272,7 +288,7 @@ onUnmounted(stopTimer)
     </el-card>
 
     <el-drawer v-model="recentDrawer" title="最近竞价" size="760px">
-      <el-table :data="recent" stripe size="small">
+      <el-table :data="recentAll" stripe size="small">
         <el-table-column prop="bidAt" label="时间" width="170" />
         <el-table-column prop="requestId" label="requestId" min-width="160">
           <template #default="{ row }">

@@ -14,6 +14,7 @@ public record DltMessageView(
         String key,
         String value,
         int replayCount,
+        boolean processed,
         String timestamp,
         Map<String, String> headers) {
 }

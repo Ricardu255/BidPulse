@@ -34,6 +34,7 @@ const detailLoading = ref(false)
 
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
+const editingStatus = ref<number | null>(null)
 const saving = ref(false)
 const targetOptions = [
   { value: 1, label: '地域' },
@@ -142,6 +143,7 @@ async function openDetail(row: AdView): Promise<void> {
 
 function openCreate(): void {
   editingId.value = null
+  editingStatus.value = null
   Object.assign(adForm, emptyForm())
   formVisible.value = true
 }
@@ -150,6 +152,7 @@ async function openEdit(row: AdView): Promise<void> {
   try {
     const data = await getAdDetail(row.id)
     editingId.value = row.id
+    editingStatus.value = data.ad.status
     Object.assign(adForm, {
       advertiserId: data.ad.advertiserId,
       title: data.ad.title,
@@ -157,7 +160,7 @@ async function openEdit(row: AdView): Promise<void> {
       categoryCode: data.ad.categoryCode,
       bid: Number(data.ad.bid),
       dailyBudget: Number(data.ad.dailyBudget),
-      status: data.ad.status === 3 ? 1 : data.ad.status,
+      status: data.ad.status === 3 ? 2 : data.ad.status,
       targets: data.targets.map((target) => ({ ...target })),
     })
     formVisible.value = true
@@ -179,6 +182,14 @@ async function saveAd(): Promise<void> {
     ElMessage.error('标题、素材地址、类目不能为空')
     return
   }
+  if (adForm.advertiserId == null || adForm.bid == null || adForm.dailyBudget == null) {
+    ElMessage.error('广告主、出价、日预算不能为空')
+    return
+  }
+  if (adForm.bid <= 0 || adForm.dailyBudget < 1) {
+    ElMessage.error('出价应大于 0，日预算应不小于 1.00 元')
+    return
+  }
   if (!adForm.targets.length) {
     ElMessage.error('至少需要 1 条定向条件')
     return
@@ -191,6 +202,8 @@ async function saveAd(): Promise<void> {
   try {
     const payload: AdUpsertRequest = {
       ...adForm,
+      // 已耗尽广告编辑时不回写 status，避免“只改标题却把系统状态改成在投”
+      status: editingStatus.value === 3 ? undefined : adForm.status,
       title: adForm.title.trim(),
       creativeUrl: adForm.creativeUrl.trim(),
       categoryCode: adForm.categoryCode.trim(),
@@ -356,6 +369,14 @@ onMounted(() => load(1))
       width="680px"
       destroy-on-close
     >
+      <el-alert
+        v-if="editingStatus === 3"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="该广告已被系统标记为已耗尽；编辑不会自动恢复投放，请使用列表的“恢复”操作并确认预算已重置。"
+        class="formula"
+      />
       <el-form :model="adForm" label-position="top">
         <div class="form-grid">
           <el-form-item label="广告主 ID">

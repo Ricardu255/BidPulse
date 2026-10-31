@@ -82,7 +82,7 @@ public class BidPulseProperties {
         /** 兜底总开关；false 仅用于 A/B 对照实验 */
         private boolean enabled = true;
         /** 强制兜底：复现「依赖全面故障」 */
-        private boolean force = false;
+        private volatile boolean force = false;
         /** 兜底广告本地缓存时长（ms）：正常时最多这么久访问一次 Redis */
         private long cacheTtlMs = 5000;
         /** Redis 读取失败后的退避时长（ms）：期间直接使用本地缓存 */
@@ -180,9 +180,9 @@ public class BidPulseProperties {
      */
     @Data
     public static class Frequency {
-        private boolean enabled = true;
+        private volatile boolean enabled = true;
         /** 同一用户对同一广告每小时的最大成交次数 */
-        private int maxPerHour = 3;
+        private volatile int maxPerHour = 3;
         /**
          * 频次 key 的 TTL（秒），默认 2 小时。
          *
@@ -204,7 +204,7 @@ public class BidPulseProperties {
         /** 是否注册 /console-api/v1 接口 */
         private boolean enabled = false;
         /** 是否允许暂停/恢复消费等写操作；只读查询不受影响 */
-        private boolean allowWrite = false;
+        private volatile boolean allowWrite = false;
         /**
          * 前后端分离部署时允许的前端来源，逗号分隔。
          * 开发态默认放行 Vite（5173）；同源部署或使用 Vite 代理时不会触发 CORS。

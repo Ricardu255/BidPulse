@@ -71,7 +71,7 @@ async function submitBid(): Promise<void> {
       ElMessage.warning('本次返回兜底广告，未扣预算')
     }
   } catch (e) {
-    ElMessage.error(errorText(e))
+    ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
     loading.value = false
   }
@@ -86,9 +86,16 @@ async function submitBurst(): Promise<void> {
     if (lastRow?.winnerId != null) {
       remember(lastRow.winnerId, form.userId)
     }
-    ElMessage.success('连打完成')
+    const failures = burstRows.value.filter((row) => row.error).length
+    if (failures === burstRows.value.length) {
+      ElMessage.error('连打全部失败，请检查后端与网络')
+    } else if (failures > 0) {
+      ElMessage.warning(`连打完成，其中 ${failures} 次失败`)
+    } else {
+      ElMessage.success('连打完成')
+    }
   } catch (e) {
-    ElMessage.error(errorText(e))
+    ElMessage({ message: errorText(e), type: 'error', grouping: true })
   } finally {
     bursting.value = false
   }
@@ -229,6 +236,7 @@ onMounted(() => {
         <el-table-column label="结果" width="110">
           <template #default="{ row }">
             <el-tag v-if="row.error" type="danger" size="small">错误</el-tag>
+            <el-tag v-else-if="!row.hasAd" type="info" size="small">空广告</el-tag>
             <el-tag v-else-if="row.fallback" type="warning" size="small">兜底</el-tag>
             <el-tag v-else type="success" size="small">胜出</el-tag>
           </template>
@@ -238,7 +246,7 @@ onMounted(() => {
           <template #default="{ row }">{{ money(row.payPrice) }}</template>
         </el-table-column>
         <el-table-column label="计费模式" width="110">
-          <template #default="{ row }">{{ priceModeLabel(row.priceMode) }}</template>
+          <template #default="{ row }">{{ row.hasAd ? priceModeLabel(row.priceMode) : '—' }}</template>
         </el-table-column>
         <el-table-column label="耗时" width="110">
           <template #default="{ row }">{{ row.wallMs ?? '—' }} ms</template>
