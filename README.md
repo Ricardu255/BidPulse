@@ -491,7 +491,7 @@ mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,Sentinel
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 77 个纯单测，全量为 109 个（本轮已跑 77/77 纯单测；集成部分需中间件恢复后回归）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 77 个纯单测，全量为 109 个（2026-11-01 已在本机三件套上跑通 109/109）：
 
 ```bash
 docker compose up -d
@@ -606,3 +606,17 @@ python tools/bench_fallback.py --port 8081 --n 2000 --mode nocand --tag "S2-候�
 - **去重表清理是安全网**：极高事件量下应改为按时间分区 / `DROP PARTITION`，逐行删除只适合本项目的数据规模。
 - **金额取整**：成交价向下取整到分（对广告主不超额收费），与 Redis 实扣和账单口径一致。
 - **管理端点需要 ADMIN token**：`/admin/**`、Actuator 指标与审计日志默认仅 ADMIN 可写/可读；生产仍建议叠加企业 SSO、MFA 与网络 ACL。
+
+### 生产化差异（刻意保留的 demo 边界）
+
+| 维度 | 当前 demo | 生产化要做的事 | 为什么现在不做 |
+|---|---|---|---|
+| 部署 | 单实例 Spring Boot 进程 | 多实例 + 负载均衡；定时任务加分布式锁/leader election；本地缓存/队列改成共享或可失效 | 会牵动调度、缓存、熔断和明细队列，改一半比不改更难讲 |
+| Kafka | 单 Broker，RF=1 | 至少 3 Broker，RF=3，`min.insync.replicas=2`，`acks=all` | 本地起多 Broker 吃内存；代码层看不出收益 |
+| Redis | `--save ""`、`--appendonly no` | AOF/RDB + 主从/Sentinel；Cluster 需处理 hash tag | 关持久化是为了演示“key 丢失 → 按账单冷启动重建”，也避免压测磁盘抖动 |
+
+面试口径：
+
+> 这是单实例演示项目。应用层用 Redis Lua 解决并发超扣，用 `processed_event` + DLT 解决重复消费，用账单重建和小时对账收敛 Redis 丢失；但基础设施高可用不是目标。生产会补 Kafka 多副本、Redis 持久化和定时任务的分布式协调。
+
+**这些不是 bug，也不是“忘了做”**。改基础设施不会显著提升求职展示价值，反而会增加本地/CI 的运行成本；当前阶段把边界讲清楚比搭一套半成品 HA 更可信。

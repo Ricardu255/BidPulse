@@ -222,3 +222,19 @@ src/test/java/com/bidpulse
 6. [`重构计划书.md`](重构计划书.md)：看已经做过什么、哪些明确后置。
 
 > `docs/local/` 是本地深度文档，`.gitignore` 不随仓库分发；仓库内以 `README.md`、本文件、`docs/重构计划书.md` 为准。
+
+---
+
+## 9. Demo 边界与生产化清单
+
+当前按**单实例、单 Broker、无 Redis 持久化**设计，这是刻意取舍，不是隐藏的生产承诺。
+
+| 维度 | 当前 | 生产化动作 |
+|---|---|---|
+| 应用实例 | 单 JVM | 多实例 + 负载均衡；`@Scheduled` 任务加分布式锁/leader election |
+| 实例内状态 | 熔断器、预热集合、明细队列、对账报告、兜底缓存 | 共享化或加跨实例失效；预算正确性仍以 Redis Lua + DB 账单为准 |
+| Kafka | 1 Broker，RF=1 | ≥3 Broker，RF=3，`min.insync.replicas=2`，`acks=all` |
+| Redis | 无 AOF/RDB | AOF everysec / RDB + 主从/Sentinel；Cluster 需 hash tag |
+| 鉴权 | 本地账号 + Bearer token | 企业 SSO/MFA、登录限流、token 撤销、审计保留策略 |
+
+**面试口径**：应用层的一致性机制（Lua、幂等、DLT、对账）与基础设施高可用是两层问题；当前项目只证明前者。不要把 demo 说成“分布式高可用”。

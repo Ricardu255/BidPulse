@@ -102,5 +102,5 @@ test('help drawer explains the pages', async ({ page }) => {
 test('admin can open audit log', async ({ page }) => {
   await page.goto('/#/audit')
   await expect(page.locator('h1')).toHaveText('审计日志')
-  await expect(page.getByText('最近写操作')).toBeVisible()
+  await expect(page.getByText('最近审计事件')).toBeVisible()
 })
