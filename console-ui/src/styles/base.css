@@ -1,36 +1,45 @@
-/* Base: variables, reset, shell, sidebar, topbar, page header. */
+/* Base: framed-sheet shell, tokens, typography, navigation. */
 :root {
-  /* 明亮配色：雾蓝 / 银蓝 / 奶白 */
-  --bp-bg: #edf4f9;
-  --bp-bg-deep: #e4eef6;
-  --bp-panel: #fffdf8;
-  --bp-panel-soft: #f8fbfd;
-  --bp-ink: #23384a;
-  --bp-ink-soft: #3d566b;
-  --bp-muted: #74899c;
-  --bp-line: #d7e3ec;
-  --bp-line-strong: #c6d6e3;
-  --bp-primary: #5b83a6;
-  --bp-primary-deep: #456b8c;
-  --bp-primary-soft: #dfeaf3;
-  --bp-silver: #c9d9e6;
-  --bp-cream: #fffaf2;
-  --bp-green: #4f8f74;
-  --bp-amber: #b9853c;
-  --bp-red: #b35d5d;
-  --bp-shadow: 0 10px 30px rgba(72, 101, 128, 0.08);
+  /* Framed sheet: tinted chrome, white work surface, ink data. */
+  --bp-bg: #f6f8f9;
+  --bp-bg-deep: #eef2f4;
+  --bp-panel: #ffffff;
+  --bp-panel-soft: #f7f9fa;
+  --bp-ink: #131416;
+  --bp-ink-soft: #35383a;
+  --bp-muted: #5d5f60;
+  --bp-line: #e8eaec;
+  --bp-line-strong: #d9dde0;
+  --bp-primary: #131416;
+  --bp-primary-deep: #000000;
+  --bp-primary-soft: #ebedee;
+  --bp-silver: #d9e0e3;
+  --bp-cream: #fafbfb;
+  --bp-green: #1e7b4f;
+  --bp-amber: #92400e;
+  --bp-red: #c4242a;
+  --bp-accent: #1b6c80;
+  --bp-chart-2: #2f70bb;
+  --bp-chart-3: #a86f0c;
+  --bp-shadow: none;
 
-  /* Element Plus 主色与圆角 */
-  --el-color-primary: #5b83a6;
-  --el-color-primary-light-3: #7d9fbe;
-  --el-color-primary-light-5: #a9c0d4;
-  --el-color-primary-light-7: #cbdbe8;
-  --el-color-primary-light-8: #dde8f1;
-  --el-color-primary-light-9: #eef4f8;
-  --el-color-primary-dark-2: #456b8c;
-  --el-border-radius-base: 10px;
-  --el-border-radius-small: 8px;
-  --el-font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+  --el-color-primary: #131416;
+  --el-color-primary-light-3: #3f4143;
+  --el-color-primary-light-5: #77797b;
+  --el-color-primary-light-7: #b7b9bb;
+  --el-color-primary-light-8: #d9dbdc;
+  --el-color-primary-light-9: #f0f1f2;
+  --el-color-primary-dark-2: #000000;
+  --el-color-success: #1e7b4f;
+  --el-color-warning: #92400e;
+  --el-color-danger: #c4242a;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-font-family: var(--font-sans);
+  --el-box-shadow-light: none;
 }
 
 * {
@@ -45,58 +54,95 @@ body,
 }
 
 body {
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--bp-ink);
-  background:
-    radial-gradient(circle at 8% 0%, rgba(255, 250, 242, 0.9) 0, transparent 38%),
-    radial-gradient(circle at 92% 4%, rgba(201, 217, 230, 0.55) 0, transparent 34%),
-    linear-gradient(180deg, #f3f8fc 0%, #e9f1f7 100%);
+  background: var(--bp-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--bp-accent);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--bp-accent);
+  outline-offset: 2px;
 }
 
 .app-shell {
   min-height: 100vh;
+  background: var(--bp-bg);
 }
 
-/* ---------- 侧边栏：银蓝 + 奶白 ---------- */
+/* ---------- Sidebar: tinted frame, labelled, neutral active state ---------- */
 .sidebar {
+  width: 228px !important;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #fcfdfe 0%, #eef5fa 100%);
-  border-right: 1px solid var(--bp-line);
+  padding: 18px 12px 14px;
+  background: transparent;
+  border-right: 0;
+  box-shadow: none;
   color: var(--bp-ink-soft);
-  padding: 22px 0 18px;
-  box-shadow: 8px 0 24px rgba(91, 131, 166, 0.04);
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 22px 22px;
+  gap: 10px;
+  padding: 2px 10px 22px;
 }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 13px;
-  background: linear-gradient(135deg, #9dbfd8, #5b83a6);
-  box-shadow: 0 8px 18px rgba(91, 131, 166, 0.25);
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--bp-ink);
+}
+
+.brand-mark::before,
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--bp-accent);
+}
+
+.brand-mark::before {
+  top: 13px;
+  width: 16px;
+}
+
+.brand-mark::after {
+  top: 9px;
+  left: 10px;
+  width: 8px;
+  opacity: 0.55;
 }
 
 .brand strong {
   display: block;
-  font-size: 17px;
-  letter-spacing: 0.03em;
   color: var(--bp-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .brand small {
   display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  color: #8aa2b5;
-  text-transform: uppercase;
+  margin-top: 1px;
+  color: var(--bp-muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .nav {
@@ -106,46 +152,52 @@ body {
 }
 
 .nav .el-menu-item-group__title {
-  padding: 10px 24px 4px !important;
-  color: #9ab0c2;
-  font-size: 11px;
-  letter-spacing: 0.14em;
+  padding: 18px 12px 6px !important;
+  color: var(--bp-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .nav .el-menu-item {
-  height: 44px;
-  margin: 4px 12px;
-  border-radius: 10px;
-  color: #637b8f;
+  height: 34px;
+  margin: 1px 0;
+  padding: 0 12px !important;
+  border-radius: 7px;
+  color: var(--bp-ink-soft);
   font-size: 14px;
+  line-height: 34px;
 }
 
 .nav .el-menu-item:hover {
-  background: #eaf2f8;
-  color: var(--bp-primary-deep);
+  background: #eef1f2;
+  color: var(--bp-ink);
 }
 
 .nav .el-menu-item.is-active {
-  background: var(--bp-primary-soft);
-  color: #345a78;
-  box-shadow: inset 0 0 0 1px rgba(91, 131, 166, 0.18);
+  background: #e9ecee;
+  color: var(--bp-ink);
+  font-weight: 500;
+  box-shadow: none;
 }
 
 .sidebar-foot {
-  padding: 18px 22px 0;
+  padding: 14px 10px 0;
   border-top: 1px solid var(--bp-line);
-  color: #8aa0b3;
+  color: var(--bp-muted);
   font-size: 12px;
 }
 
 .sidebar-foot span {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #e4eef6;
-  color: var(--bp-primary-deep);
+  padding: 2px 7px;
+  border: 1px solid var(--bp-line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--bp-ink-soft);
   font-size: 11px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
 }
 
 .sidebar-foot p {
@@ -156,58 +208,65 @@ body {
   white-space: nowrap;
 }
 
-/* ---------- 顶栏 ---------- */
+/* ---------- Top bar: 48px, same tinted frame, no rule ---------- */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  background: rgba(255, 253, 248, 0.82);
-  border-bottom: 1px solid var(--bp-line);
-  backdrop-filter: blur(12px);
+  height: 48px;
+  padding: 0 24px 0 8px;
+  background: transparent;
+  border-bottom: 0;
+}
+
+.topbar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .topbar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--bp-ink);
+  color: var(--bp-ink-soft);
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.api-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+.crumb-root {
+  color: var(--bp-muted);
+}
+
+.user-chip {
+  padding: 3px 8px;
   border: 1px solid var(--bp-line);
-  border-radius: 999px;
-  color: #6f879a;
+  border-radius: 5px;
+  background: #fff;
+  color: var(--bp-ink-soft);
   font-size: 12px;
-  font-family: Consolas, "SFMono-Regular", monospace;
-  background: var(--bp-cream);
+  white-space: nowrap;
 }
 
-.api-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--bp-green);
-  box-shadow: 0 0 0 3px rgba(79, 143, 116, 0.14);
-}
-
+/* ---------- Work surface: white sheet inset 8px right/bottom ---------- */
 .main {
+  min-height: calc(100vh - 56px);
+  margin: 0 8px 8px 0;
   padding: 24px;
-  background: transparent;
+  overflow: auto;
+  background: var(--bp-panel);
+  border: 1px solid var(--bp-line);
+  border-radius: 16px;
+  box-shadow: none;
 }
 
 .page {
-  max-width: 1320px;
-  margin: 0 auto;
+  max-width: 1280px;
+  margin: 0;
 }
 
 .page-header {
@@ -215,20 +274,66 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 24px;
 }
 
 .page-header h1 {
-  margin: 0 0 6px;
-  font-size: 24px;
-  letter-spacing: -0.01em;
+  margin: 0 0 5px;
   color: var(--bp-ink);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .page-header p {
   margin: 0;
   color: var(--bp-muted);
-  font-size: 13px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
+.page-header .el-tag {
+  margin-top: 3px;
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+/* ---------- Phone: the frame disappears; the sheet is the screen ---------- */
+@media (max-width: 560px) {
+  .topbar-title {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    padding: 0 14px;
+  }
+
+  .main {
+    min-height: calc(100vh - 48px);
+    margin: 0;
+    padding: 18px 14px;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-header h1 {
+    font-size: 20px;
+  }
+}

@@ -29,7 +29,7 @@ function emptyForm(): AdUpsertRequest {
   return {
     advertiserId: 1,
     title: '',
-    creativeUrl: 'https://cdn.example.com/creative/new.jpg',
+    creativeUrl: 'https://cdn.cdn.bidpulse-demo.com/creative/new.jpg',
     categoryCode: 'travel',
     bid: 1.0,
     dailyBudget: 1000,

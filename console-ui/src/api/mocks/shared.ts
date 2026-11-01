@@ -16,7 +16,7 @@ export const MOCK_ADS: AdView[] = Array.from({ length: 12 }, (_, index) => {
     id,
     advertiserId: (index % 5) + 1,
     title: `创意标题-${id}`,
-    creativeUrl: `https://cdn.example.com/creative/${id}.jpg`,
+    creativeUrl: `https://cdn.cdn.bidpulse-demo.com/creative/${id}.jpg`,
     categoryCode: ['travel', 'ecom', 'game', 'news', 'finance'][index % 5],
     bid: Number((0.6 + (index % 6) * 0.2).toFixed(2)),
     dailyBudget: [1000, 5000, 10000, 50000][index % 4],

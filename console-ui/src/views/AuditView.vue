@@ -21,6 +21,10 @@ async function load(): Promise<void> {
   }
 }
 
+function formatTime(value: string): string {
+  return value.replace('T', ' ').slice(0, 19)
+}
+
 function statusType(status: number): 'success' | 'danger' | 'warning' | 'info' {
   if (status >= 200 && status < 300) return 'success'
   if (status === 401) return 'warning'
@@ -58,7 +62,9 @@ onMounted(load)
       </template>
 
       <el-table v-loading="loading" :data="logs" row-key="id" empty-text="暂无审计记录">
-        <el-table-column prop="createdAt" label="时间" width="180" />
+        <el-table-column prop="createdAt" label="时间" width="170">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
         <el-table-column prop="actor" label="操作人" width="120" />
         <el-table-column prop="role" label="角色" width="110">
           <template #default="{ row }">

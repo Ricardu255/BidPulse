@@ -48,6 +48,12 @@ async function load(): Promise<void> {
   }
 }
 
+function isNumericColumn(column: string): boolean {
+  const sample = data.value?.rows.find((row) => row[column] != null)?.[column]
+  if (typeof sample === 'number') return true
+  return typeof sample === 'string' && /^-?\d+(\.\d+)?$/.test(sample)
+}
+
 function exportCsv(): void {
   if (!data.value) return
   // BOM 让 Excel 正确识别 UTF-8 中文
@@ -104,12 +110,14 @@ onMounted(load)
         </div>
       </template>
       <el-alert v-if="error" type="error" :closable="false" show-icon :title="error" class="formula" />
-      <el-table v-if="!error" v-loading="loading" :data="data?.rows ?? []" stripe size="small" max-height="560">
+      <el-table v-if="!error" v-loading="loading" :data="data?.rows ?? []" size="small" max-height="560">
         <el-table-column
           v-for="column in data?.columns ?? []"
           :key="column"
           :label="column"
-          min-width="140"
+          :min-width="column === 'request_id' ? 220 : column === 'bid_at' ? 180 : 140"
+          :align="isNumericColumn(column) ? 'right' : 'left'"
+          show-overflow-tooltip
         >
           <template #default="{ row }">
             <span class="mono">{{ formatValue(row[column]) }}</span>

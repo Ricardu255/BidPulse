@@ -202,13 +202,13 @@ onMounted(() => load(1))
       <template #header>广告列表</template>
       <el-table v-loading="loading" :data="ads" stripe size="small">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="advertiserId" label="广告主" width="80" />
+        <el-table-column prop="advertiserId" label="广告主" width="80" align="right" />
         <el-table-column prop="title" label="标题" min-width="150" />
         <el-table-column prop="categoryCode" label="类目" width="90" />
-        <el-table-column label="出价" width="90">
+        <el-table-column label="出价" width="90" align="right">
           <template #default="{ row }">{{ money(row.bid) }}</template>
         </el-table-column>
-        <el-table-column label="日预算" width="100">
+        <el-table-column label="日预算" width="100" align="right">
           <template #default="{ row }">{{ money(row.dailyBudget) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90">

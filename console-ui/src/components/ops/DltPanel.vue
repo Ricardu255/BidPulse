@@ -123,9 +123,9 @@ onMounted(refreshDlt)
           </div>
         </template>
       </el-table-column>
-      <el-table-column prop="partition" label="分区" width="80" />
-      <el-table-column prop="offset" label="位点 offset" width="110" />
-      <el-table-column prop="replayCount" label="重放次数" width="100" />
+      <el-table-column prop="partition" label="分区" width="80" align="right" />
+      <el-table-column prop="offset" label="位点 offset" width="110" align="right" />
+      <el-table-column prop="replayCount" label="重放次数" width="100" align="right" />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.processed ? 'info' : 'warning'" size="small">

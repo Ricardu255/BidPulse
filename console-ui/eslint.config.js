@@ -11,6 +11,7 @@ export default tseslint.config(
       'playwright-report/**',
       'screenshots/**',
       'test-results/**',
+      '.taste-skill/**',
     ],
   },
   js.configs.recommended,

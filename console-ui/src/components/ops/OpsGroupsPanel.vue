@@ -93,10 +93,10 @@ onMounted(refreshGroups)
     <template #header>分区明细</template>
     <el-table :data="partitions" stripe size="small" max-height="420">
       <el-table-column prop="group" label="消费组" width="180" />
-      <el-table-column prop="partition" label="分区" width="80" />
-      <el-table-column prop="committed" label="已提交位点" width="140" />
-      <el-table-column prop="end" label="末端位点" width="140" />
-      <el-table-column label="积压 lag" width="120">
+      <el-table-column prop="partition" label="分区" width="80" align="right" />
+      <el-table-column prop="committed" label="已提交位点" width="140" align="right" />
+      <el-table-column prop="end" label="末端位点" width="140" align="right" />
+      <el-table-column label="积压 lag" width="120" align="right">
         <template #default="{ row }">
           <el-tag :type="row.lag > 0 ? 'warning' : 'success'" size="small">{{ row.lag }}</el-tag>
         </template>

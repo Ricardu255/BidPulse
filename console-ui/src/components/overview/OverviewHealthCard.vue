@@ -18,9 +18,9 @@ function healthLabel(key: string): string {
     redis: 'Redis',
     kafka: 'Kafka',
     diskSpace: '磁盘',
-    ping: 'Ping',
-    dbBreaker: 'DB 熔断',
-    redisBreaker: 'Redis 熔断',
+    ping: '连通性',
+    dbBreaker: '数据库熔断',
+    redisBreaker: '缓存熔断',
   }
   return labels[key] ?? key
 }

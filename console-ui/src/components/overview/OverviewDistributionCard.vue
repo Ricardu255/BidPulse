@@ -15,12 +15,10 @@ const distribution = computed(() => {
     else win += 1
   }
   const total = win + fallback + empty
-  const winEnd = total ? (win / total) * 100 : 0
-  const fallbackEnd = total ? winEnd + (fallback / total) * 100 : 0
-  const gradient = total
-    ? `conic-gradient(#5b83a6 0 ${winEnd}%, #b9853c ${winEnd}% ${fallbackEnd}%, #c9d9e6 ${fallbackEnd}% 100%)`
-    : 'conic-gradient(#e4edf4 0 100%)'
-  return { win, fallback, empty, total, gradient }
+  const circumference = 2 * Math.PI * 50
+  const winLength = total ? (win / total) * circumference : 0
+  const fallbackLength = total ? (fallback / total) * circumference : 0
+  return { win, fallback, empty, total, circumference, winLength, fallbackLength }
 })
 </script>
 
@@ -28,7 +26,27 @@ const distribution = computed(() => {
   <el-card class="panel" shadow="never">
     <template #header>最近结果分布</template>
     <div class="donut-wrap">
-      <div class="donut" :style="{ background: distribution.gradient }">
+      <div class="donut">
+        <svg class="donut-svg" viewBox="0 0 120 120" role="img" aria-label="最近竞价结果分布">
+          <circle class="donut-track" cx="60" cy="60" r="50" />
+          <circle
+            v-if="distribution.winLength"
+            class="donut-segment win"
+            cx="60"
+            cy="60"
+            r="50"
+            :stroke-dasharray="`${distribution.winLength} ${distribution.circumference}`"
+          />
+          <circle
+            v-if="distribution.fallbackLength"
+            class="donut-segment fallback"
+            cx="60"
+            cy="60"
+            r="50"
+            :stroke-dasharray="`${distribution.fallbackLength} ${distribution.circumference}`"
+            :stroke-dashoffset="`-${distribution.winLength}`"
+          />
+        </svg>
         <div class="donut-center">
           <strong>{{ distribution.total }}</strong>
           <small>最近竞价</small>

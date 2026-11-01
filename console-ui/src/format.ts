@@ -12,7 +12,12 @@ export function ttlLabel(value: number | null | undefined): string {
   if (value == null) return '—'
   if (value === -1) return '无过期'
   if (value < 0) return '未创建'
-  return `${value}s`
+  if (value < 60) return `${value} 秒`
+  if (value < 3600) return `${Math.round(value / 60)} 分钟`
+  if (value < 86400) return `${Number((value / 3600).toFixed(1))} 小时`
+  const days = Math.floor(value / 86400)
+  const hours = Math.floor((value % 86400) / 3600)
+  return hours > 0 ? `${days} 天 ${hours} 小时` : `${days} 天`
 }
 
 export function percent(part: number | null | undefined, total: number | null | undefined): number {

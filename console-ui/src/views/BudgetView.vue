@@ -164,7 +164,7 @@ onMounted(refresh)
       <MetricCard label="日预算" :value="money(budget.dailyBudget)" />
       <MetricCard label="剩余额度" :value="cents(budget.remainingCents)" />
       <MetricCard label="已消耗" :value="cents(budget.spentCents)" />
-      <MetricCard label="预算 key TTL" :value="ttlLabel(budget.ttlSeconds)" />
+      <MetricCard label="预算 key 有效期" :value="ttlLabel(budget.ttlSeconds)" />
     </div>
 
     <el-card v-if="budget" class="panel" shadow="never">
@@ -223,7 +223,7 @@ onMounted(refresh)
             hint="上限来自 bidpulse.frequency.max-per-hour"
           />
           <MetricCard
-            label="频次 key TTL"
+            label="频次 key 有效期"
             :value="ttlLabel(frequency.ttlSeconds)"
             hint="freq:u:{userId}:{yyyyMMddHH}"
           />

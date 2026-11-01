@@ -176,7 +176,7 @@ onMounted(() => {
     <el-card v-if="last" class="panel" shadow="never">
       <div class="result-head">
         <div>
-          <span class="eyebrow">竞价结果</span>
+          <span class="result-context">竞价结果</span>
           <h2>{{ resultTitle }}</h2>
           <p>{{ last?.requestId }}</p>
         </div>
@@ -242,7 +242,16 @@ onMounted(() => {
       </el-table>
     </el-card>
 
-    <el-empty v-else description="发起一次竞价，查看胜出广告与成交价" />
+    <div v-else class="empty-state">
+      <span class="empty-mark" aria-hidden="true"></span>
+      <strong>还没有竞价结果</strong>
+      <p>发起一次请求，查看候选、二价成交与兜底原因。</p>
+      <ol>
+        <li>提交一次竞价</li>
+        <li>核对胜出者与成交价</li>
+        <li>到预算与频次页看实时状态</li>
+      </ol>
+    </div>
 
     <el-card v-if="burstRows.length" class="panel" shadow="never">
       <template #header>连打结果</template>

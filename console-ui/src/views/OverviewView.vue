@@ -122,11 +122,11 @@ onMounted(refresh)
     </el-card>
 
     <el-row v-if="overview" :gutter="16">
-      <el-col :xs="24" :md="7">
+      <el-col :xs="24" :md="8">
         <OverviewHealthCard :health="overview.health" />
       </el-col>
 
-      <el-col :xs="24" :md="7">
+      <el-col :xs="24" :md="6">
         <OverviewDistributionCard :recent="recent" />
       </el-col>
 
@@ -142,18 +142,18 @@ onMounted(refresh)
           <el-button size="small" @click="openRecent">查看最近 50 条</el-button>
         </div>
       </template>
-      <el-table :data="recent.slice(0, 5)" stripe size="small">
+      <el-table class="recent-table" :data="recent.slice(0, 5)" size="small">
         <el-table-column prop="bidAt" label="时间" width="170" />
         <el-table-column label="requestId" width="150">
           <template #default="{ row }">
             <span class="mono">{{ shortId(row.requestId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="adId" label="adId" width="100" />
-        <el-table-column label="胜出价" width="110">
+        <el-table-column prop="adId" label="adId" width="100" align="right" />
+        <el-table-column label="胜出价" width="110" align="right">
           <template #default="{ row }">{{ money(row.winBid) }}</template>
         </el-table-column>
-        <el-table-column label="成交价" width="110">
+        <el-table-column label="成交价" width="110" align="right">
           <template #default="{ row }">{{ money(row.payPrice) }}</template>
         </el-table-column>
         <el-table-column label="结果" width="100">
@@ -161,10 +161,23 @@ onMounted(refresh)
             <el-tag :type="resultType(row)" size="small">{{ resultLabel(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="耗时" width="100">
+        <el-table-column label="耗时" width="100" align="right">
           <template #default="{ row }">{{ row.costMs }} ms</template>
         </el-table-column>
       </el-table>
+      <div class="recent-mobile">
+        <div v-for="row in recent.slice(0, 5)" :key="row.requestId" class="recent-mobile-row">
+          <div class="recent-mobile-main">
+            <span class="mono">{{ shortId(row.requestId) }}</span>
+            <el-tag :type="resultType(row)" size="small">{{ resultLabel(row) }}</el-tag>
+          </div>
+          <div class="recent-mobile-meta">
+            <span>{{ row.bidAt }}</span>
+            <strong>{{ money(row.payPrice) }}</strong>
+            <span>adId {{ row.adId }}</span>
+          </div>
+        </div>
+      </div>
       <p class="hint">
         明细由本地队列异步落库，可能有约 200ms 延迟。结果中的“兜底”表示这次请求没有可投放广告
         （无候选 / 预算耗尽 / 依赖故障 / 超时），系统返回固定 adId={{ FALLBACK_AD_ID }} 的保底广告；
@@ -180,7 +193,7 @@ onMounted(refresh)
             <span class="mono">{{ row.requestId }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="adId" label="adId" width="100" />
+        <el-table-column prop="adId" label="adId" width="100" align="right" />
         <el-table-column label="胜出价" width="100">
           <template #default="{ row }">{{ money(row.winBid) }}</template>
         </el-table-column>

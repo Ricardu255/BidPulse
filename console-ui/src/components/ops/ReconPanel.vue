@@ -129,19 +129,19 @@ onMounted(refreshRecon)
     <el-card class="panel" shadow="never">
       <template #header>差异明细</template>
       <el-table :data="recon.mismatches ?? []" stripe size="small" max-height="360">
-        <el-table-column prop="adId" label="adId" width="100" />
+        <el-table-column prop="adId" label="adId" width="100" align="right" />
         <el-table-column label="差异方向" width="170">
           <template #default="{ row }">
             <el-tag :type="directionType(row.direction)" size="small">{{ directionLabel(row.direction) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Redis spent" width="120">
+        <el-table-column label="Redis spent" width="120" align="right">
           <template #default="{ row }">{{ cents(row.redisCents) }}</template>
         </el-table-column>
-        <el-table-column label="DB 账单" width="120">
+        <el-table-column label="DB 账单" width="120" align="right">
           <template #default="{ row }">{{ cents(row.dbCents) }}</template>
         </el-table-column>
-        <el-table-column label="差值" width="120">
+        <el-table-column label="差值" width="120" align="right">
           <template #default="{ row }">{{ cents(row.diffCents) }}</template>
         </el-table-column>
         <el-table-column label="处理" width="120">

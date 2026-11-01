@@ -10,7 +10,8 @@ describe('format', () => {
   })
 
   it('formats ttl sentinel values', () => {
-    expect(ttlLabel(7200)).toBe('7200s')
+    expect(ttlLabel(7200)).toBe('2 小时')
+    expect(ttlLabel(171890)).toBe('1 天 23 小时')
     expect(ttlLabel(-1)).toBe('无过期')
     expect(ttlLabel(-2)).toBe('未创建')
     expect(ttlLabel(null)).toBe('—')
