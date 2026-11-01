@@ -83,17 +83,17 @@ onMounted(refresh)
     </PageHeader>
 
     <div v-if="overview" class="metric-grid six">
-      <MetricCard label="今日请求" :value="overview.bidsToday" hint="bid_log 今日行数" />
+      <MetricCard label="今日请求" :value="overview.bidsToday" hint="今日竞价明细记录数" />
       <MetricCard
         label="兜底率"
         :value="fallbackPercent"
         :hint="`${overview.fallbackToday} 次兜底`"
       />
-      <MetricCard label="P95 耗时" :value="`${overview.p95CostMs} ms`" hint="今日最近 1000 条" />
+      <MetricCard label="P95 耗时" :value="`${overview.p95CostMs} ms`" hint="今日最近 1000 次竞价" />
       <MetricCard
         label="今日消耗"
         :value="money(overview.spendToday)"
-        hint="billing_event 汇总"
+        hint="今日计费流水汇总"
       />
       <MetricCard
         label="活跃广告"
@@ -144,12 +144,12 @@ onMounted(refresh)
       </template>
       <el-table class="recent-table" :data="recent.slice(0, 5)" size="small">
         <el-table-column prop="bidAt" label="时间" width="170" />
-        <el-table-column label="requestId" width="150">
+        <el-table-column label="请求 ID" width="150">
           <template #default="{ row }">
             <span class="mono">{{ shortId(row.requestId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="adId" label="adId" width="100" align="right" />
+        <el-table-column prop="adId" label="广告 ID" width="100" align="right" />
         <el-table-column label="胜出价" width="110" align="right">
           <template #default="{ row }">{{ money(row.winBid) }}</template>
         </el-table-column>
@@ -174,13 +174,13 @@ onMounted(refresh)
           <div class="recent-mobile-meta">
             <span>{{ row.bidAt }}</span>
             <strong>{{ money(row.payPrice) }}</strong>
-            <span>adId {{ row.adId }}</span>
+            <span>广告 {{ row.adId }}</span>
           </div>
         </div>
       </div>
       <p class="hint">
         明细由本地队列异步落库，可能有约 200ms 延迟。结果中的“兜底”表示这次请求没有可投放广告
-        （无候选 / 预算耗尽 / 依赖故障 / 超时），系统返回固定 adId={{ FALLBACK_AD_ID }} 的保底广告；
+        （无候选 / 预算耗尽 / 依赖故障 / 超时），系统返回固定广告 ID {{ FALLBACK_AD_ID }} 的保底广告；
         它的出价是配置值，payPrice 为“—”表示不计费。
       </p>
     </el-card>
@@ -188,12 +188,12 @@ onMounted(refresh)
     <el-drawer v-model="recentDrawer" title="最近竞价" size="760px">
       <el-table :data="recentAll" stripe size="small">
         <el-table-column prop="bidAt" label="时间" width="170" />
-        <el-table-column prop="requestId" label="requestId" min-width="160">
+        <el-table-column prop="requestId" label="请求 ID" min-width="160">
           <template #default="{ row }">
             <span class="mono">{{ row.requestId }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="adId" label="adId" width="100" align="right" />
+        <el-table-column prop="adId" label="广告 ID" width="100" align="right" />
         <el-table-column label="胜出价" width="100">
           <template #default="{ row }">{{ money(row.winBid) }}</template>
         </el-table-column>

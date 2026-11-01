@@ -223,11 +223,11 @@ onMounted(() => {
         :closable="false"
         show-icon
         title="没有可投放的真实广告，已返回兜底广告"
-        :description="`兜底广告 adId=${FALLBACK_AD_ID} 是保底广告，不是广告主投放；出价只是配置值，payPrice 为空，不计费（priceMode=2）。`"
+        :description="`兜底广告的广告 ID 为 ${FALLBACK_AD_ID}，不是广告主投放；出价只是配置值，成交价为空，不计费。`"
       />
 
       <el-table :data="last?.topCandidates ?? []" stripe size="small">
-        <el-table-column prop="adId" label="adId" width="110" />
+        <el-table-column prop="adId" label="广告 ID" width="110" />
         <el-table-column prop="title" label="广告标题" min-width="220" />
         <el-table-column prop="categoryCode" label="类目" width="120" />
         <el-table-column label="出价" width="120">
@@ -265,7 +265,7 @@ onMounted(() => {
             <el-tag v-else type="success" size="small">胜出</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="winnerId" label="胜出 adId" width="130" />
+        <el-table-column prop="winnerId" label="胜出广告 ID" width="130" />
         <el-table-column label="成交价" width="130">
           <template #default="{ row }">{{ money(row.payPrice) }}</template>
         </el-table-column>

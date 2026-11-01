@@ -37,7 +37,7 @@ async function refreshGroups(): Promise<void> {
 
 async function pause(): Promise<void> {
   try {
-    await ElMessageBox.confirm('暂停后消费组停止拉取，/bid 主链路不受影响，lag 会上升。继续？', '暂停消费', {
+    await ElMessageBox.confirm('暂停后消费组停止拉取，竞价主链路不受影响，积压会上升。继续？', '暂停消费', {
       type: 'warning',
       confirmButtonText: '暂停',
       cancelButtonText: '取消',
@@ -72,7 +72,7 @@ onMounted(refreshGroups)
       <el-button type="warning" plain :disabled="!canWrite" @click="pause">暂停消费</el-button>
       <el-button type="success" plain :disabled="!canWrite" @click="resume">恢复消费</el-button>
       <el-switch v-model="auto" active-text="自动刷新（2s）" />
-      <span class="hint">积压 lag = 末端位点 end − 已提交位点 committed；负值按 0 处理。</span>
+      <span class="hint">积压 = 末端位点 − 已提交位点；负值按 0 处理。</span>
     </FilterBar>
   </el-card>
 
@@ -96,7 +96,7 @@ onMounted(refreshGroups)
       <el-table-column prop="partition" label="分区" width="80" align="right" />
       <el-table-column prop="committed" label="已提交位点" width="140" align="right" />
       <el-table-column prop="end" label="末端位点" width="140" align="right" />
-      <el-table-column label="积压 lag" width="120" align="right">
+      <el-table-column label="积压" width="120" align="right">
         <template #default="{ row }">
           <el-tag :type="row.lag > 0 ? 'warning' : 'success'" size="small">{{ row.lag }}</el-tag>
         </template>

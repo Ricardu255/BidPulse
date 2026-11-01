@@ -60,7 +60,7 @@ async function submit(): Promise<void> {
             </div>
             <div class="login-flow-row">
               <span>03</span>
-              <div><strong>账单与重放</strong><small>Kafka 幂等消费，异常进 DLT</small></div>
+              <div><strong>账单与重放</strong><small>Kafka 幂等消费，异常进失败队列</small></div>
             </div>
           </div>
         </div>
@@ -72,7 +72,7 @@ async function submit(): Promise<void> {
           <span>并发扣减不超卖</span>
         </div>
         <div class="login-fact">
-          <strong>DLT 可重放</strong>
+          <strong>失败消息可重放</strong>
           <span>消费失败可恢复</span>
         </div>
         <div class="login-fact">

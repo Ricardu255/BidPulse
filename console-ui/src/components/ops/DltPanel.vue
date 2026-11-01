@@ -46,8 +46,8 @@ async function refreshDlt(): Promise<void> {
 async function triggerReplay(): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      `将 DLT 中可解析、未超过 3 次的消息重放回主主题，本轮上限 ${replayMax.value} 条。继续？`,
-      '触发 DLT 重放',
+      `将失败消息中可解析、未超过 3 次重放次数的消息重新投递回主流程，本轮上限 ${replayMax.value} 条。继续？`,
+      '触发失败消息重放',
       { type: 'warning', confirmButtonText: '开始重放', cancelButtonText: '取消' },
     )
     replaying.value = true
@@ -68,7 +68,7 @@ async function replayOne(row: DltMessageView): Promise<void> {
   const key = `${row.partition}:${row.offset}`
   try {
     await ElMessageBox.confirm(
-      `重放 partition=${row.partition} offset=${row.offset}？DLT 原记录会保留，重复消费由 processed_event 幂等吸收。`,
+      `重放第 ${row.partition} 分区、第 ${row.offset} 条位点？原失败消息会保留，重复消费由幂等记录吸收。`,
       '单条重放',
       { type: 'warning', confirmButtonText: '重放', cancelButtonText: '取消' },
     )
@@ -90,7 +90,7 @@ onMounted(refreshDlt)
 <template>
   <el-card class="panel" shadow="never">
     <FilterBar>
-      <span class="hint">最近 DLT 消息（含已处理/已跳过）</span>
+      <span class="hint">最近失败消息（DLT，含已处理/已跳过）</span>
       <span class="filter-label">拉取条数</span>
       <el-input-number v-model="dltLimit" :min="1" :max="50" :precision="0" size="small" />
       <el-button size="small" :loading="dltLoading" @click="refreshDlt">刷新</el-button>
@@ -124,7 +124,7 @@ onMounted(refreshDlt)
         </template>
       </el-table-column>
       <el-table-column prop="partition" label="分区" width="80" align="right" />
-      <el-table-column prop="offset" label="位点 offset" width="110" align="right" />
+      <el-table-column prop="offset" label="消息位点" width="110" align="right" />
       <el-table-column prop="replayCount" label="重放次数" width="100" align="right" />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
@@ -133,7 +133,7 @@ onMounted(refreshDlt)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="key" label="消息 key" width="120" />
+      <el-table-column prop="key" label="消息标识" width="120" />
       <el-table-column prop="timestamp" label="时间" width="170" />
       <el-table-column label="value 预览" min-width="220">
         <template #default="{ row }">{{ preview(row.value) }}</template>
@@ -152,9 +152,9 @@ onMounted(refreshDlt)
         </template>
       </el-table-column>
     </el-table>
-    <el-empty v-if="!dltMessages.length" description="DLT 暂无待处理消息" :image-size="60" />
+    <el-empty v-if="!dltMessages.length" description="暂无待处理失败消息" :image-size="60" />
     <p class="hint">
-      浏览使用独立 assign 消费者，不提交位点；单条重放只投递主主题，不推进定时任务位点。
+      浏览使用独立消费者，不提交位点；单条重放只重新投递消息，不推进定时任务位点。
     </p>
   </el-card>
 </template>

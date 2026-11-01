@@ -12,7 +12,7 @@ const activeTab = ref<'groups' | 'dlt' | 'recon'>('groups')
   <div class="page">
     <PageHeader
       title="运行监控"
-      description="看异步链路有没有卡住：消费组 lag、DLT 失败消息、Redis 与账单差异。"
+      description="看异步链路有没有卡住：消费积压、失败消息重放、Redis 与账单差异。"
       tag="GET /console-api/v1/kafka/groups"
     />
 
@@ -20,7 +20,7 @@ const activeTab = ref<'groups' | 'dlt' | 'recon'>('groups')
       <el-tab-pane label="消费组" name="groups">
         <OpsGroupsPanel :active="activeTab === 'groups'" />
       </el-tab-pane>
-      <el-tab-pane label="DLT 重放" name="dlt">
+      <el-tab-pane label="失败消息重放" name="dlt">
         <DltPanel />
       </el-tab-pane>
       <el-tab-pane label="预算对账" name="recon">

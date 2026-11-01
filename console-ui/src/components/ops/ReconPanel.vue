@@ -68,7 +68,7 @@ async function refreshRecon(): Promise<void> {
 async function triggerRecon(): Promise<void> {
   try {
     await ElMessageBox.confirm(
-      '立即对比 Redis spent 与 billing_event 当日汇总：Redis 低于账单自动修复，高于账单只告警。继续？',
+      '立即对比 Redis 累计消耗与当日计费流水：Redis 低于账单自动修复，高于账单只告警。继续？',
       '立即对账',
       { type: 'warning', confirmButtonText: '开始对账', cancelButtonText: '取消' },
     )
@@ -112,8 +112,8 @@ onMounted(refreshRecon)
         </template>
       </MetricCard>
       <MetricCard label="对账广告数" :value="recon.adCount" />
-      <MetricCard label="Redis 消耗高于账单" :value="recon.alerted" hint="只告警，不调低 spent" />
-      <MetricCard label="账单高于 Redis（已修复）" :value="recon.repaired" hint="按 DB 账单重算 spent" />
+      <MetricCard label="Redis 消耗高于账单" :value="recon.alerted" hint="只告警，不调低累计消耗" />
+      <MetricCard label="账单高于 Redis（已修复）" :value="recon.repaired" hint="按数据库账单重算累计消耗" />
       <MetricCard label="耗时" :value="`${recon.durationMs} ms`" />
     </div>
 
@@ -129,13 +129,13 @@ onMounted(refreshRecon)
     <el-card class="panel" shadow="never">
       <template #header>差异明细</template>
       <el-table :data="recon.mismatches ?? []" stripe size="small" max-height="360">
-        <el-table-column prop="adId" label="adId" width="100" align="right" />
+        <el-table-column prop="adId" label="广告 ID" width="100" align="right" />
         <el-table-column label="差异方向" width="170">
           <template #default="{ row }">
             <el-tag :type="directionType(row.direction)" size="small">{{ directionLabel(row.direction) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Redis spent" width="120" align="right">
+        <el-table-column label="Redis 累计消耗" width="120" align="right">
           <template #default="{ row }">{{ cents(row.redisCents) }}</template>
         </el-table-column>
         <el-table-column label="DB 账单" width="120" align="right">

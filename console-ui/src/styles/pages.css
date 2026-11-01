@@ -766,3 +766,11 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+.table-description {
+  margin: 4px 0 0;
+  color: var(--bp-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}

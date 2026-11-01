@@ -137,7 +137,7 @@ onMounted(refresh)
         <span class="filter-label">用户 ID</span>
         <el-input
           v-model="session.userId"
-          placeholder="userId（可空，匿名不控频）"
+          placeholder="用户 ID（可空，匿名不控频）"
           clearable
           @change="onFilterChange"
         />
@@ -150,7 +150,7 @@ onMounted(refresh)
     <el-alert v-if="notFound" type="warning" :closable="false" show-icon class="panel">
       <template #title>没有找到这个广告</template>
       <div class="not-found">
-        <p>adId 必须存在于 ad 表；兜底广告 {{ FALLBACK_AD_ID }} 不在表中，已删除的广告也查不到。</p>
+        <p>广告 ID 必须存在于广告库；兜底广告 {{ FALLBACK_AD_ID }} 不在表中，已删除的广告也查不到。</p>
         <el-button size="small" type="primary" @click="useDefaultAd">使用广告 110</el-button>
         <el-button size="small" @click="openAds">打开广告列表</el-button>
       </div>
@@ -181,7 +181,7 @@ onMounted(refresh)
         type="info"
         :closable="false"
         show-icon
-        title="budget key 缺失但 spent 存在：当前展示的是「日预算 − 已消耗」反推值。"
+        title="当日剩余额度记录缺失，但累计消耗还在：当前展示的是「日预算 − 已消耗」反推值。"
       />
       <div v-else class="progress-block">
         <div class="progress-caption">
@@ -195,7 +195,7 @@ onMounted(refresh)
           :status="budgetProgressStatus"
         />
         <p class="hint">
-          预算 key 为 budget:{adId}:{yyyyMMdd}，spent 为累计消耗；金额在 Redis 内以「分」存储。
+          预算按「广告 × 天」记录在 Redis：剩余额度与累计消耗；金额以「分」存储。
         </p>
       </div>
     </el-card>
@@ -213,19 +213,19 @@ onMounted(refresh)
         <div class="metric-grid three">
           <MetricCard
             label="用户"
-            :hint="`adId #${frequency.adId}`"
+            :hint="`广告 #${frequency.adId}`"
           >
             <template #value><strong class="mono">{{ frequency.userId }}</strong></template>
           </MetricCard>
           <MetricCard
             label="本小时成交次数"
             :value="`${frequency.count ?? 0} / ${frequency.maxPerHour}`"
-            hint="上限来自 bidpulse.frequency.max-per-hour"
+            hint="上限来自运行时配置"
           />
           <MetricCard
             label="频次 key 有效期"
             :value="ttlLabel(frequency.ttlSeconds)"
-            hint="freq:u:{userId}:{yyyyMMddHH}"
+            hint="按「用户 × 自然小时」统计"
           />
         </div>
         <div class="progress-block">
