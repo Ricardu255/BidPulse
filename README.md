@@ -1,5 +1,8 @@
 # BidPulse · 广告竞价投放
 
+> **第一次阅读**：先看本文件的「零、这个程序是做什么的」和「四、快速开始」；想看代码结构直接跳 [`docs/architecture.md`](docs/architecture.md)。
+> **文档入口**：[`docs/README.md`](docs/README.md) 按「先跑 → 结构 → 深挖」组织；根目录不再堆放多份长文档。
+
 **目录**：
 · [这个程序是做什么的](#零这个程序是做什么的)
 · [控制台预览](#控制台预览)
@@ -47,7 +50,7 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 ![BidPulse Console 首页](docs/images/console-overview.png)
 
 > 首页集中展示今日请求、兜底率、P95、消耗、健康/熔断、最近结果分布、近 30 分钟趋势和最近竞价。
-> 其余页面（模拟竞价、广告管理、预算与频次、运行监控、数据查询、演示开关）见 `console-ui/README.md`。
+> 其余页面（登录、模拟竞价、广告管理、预算与频次、运行监控、数据查询、演示开关、审计日志）见 `console-ui/README.md`。
 
 ## 一、核心特性
 
@@ -429,24 +432,31 @@ src/main/java/com/bidpulse
 ├─ api/                 HTTP 边界：controller、dto、统一响应与异常
 ├─ bid/                 竞价领域：BidService、PricingPolicy、FallbackAdProvider、TargetingResolver
 ├─ admin/               管理端服务
+├─ auth/                登录、Bearer token、角色与安全过滤链
+├─ audit/               写操作审计（filter + service）
+├─ console/             控制台 BFF：api / command / query / dto / config
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
-│  ├─ persistence/      MyBatis Mapper
-│  ├─ redis/            预算 Lua 扣减 / 日预算同步
+│  ├─ persistence/      MyBatis Mapper（AdMapper、AuditLogMapper）
+│  ├─ redis/            预算 Lua 扣减 / 日预算同步 / 频次
 │  ├─ kafka/            事件发布、消费模板、三个消费组、DLT 错误处理
 │  └─ buffer/           竞价明细 / 耗尽状态本地缓冲
 ├─ breaker/             熔断门（Sentinel + local 基线）
 ├─ job/                 定时任务（预算 key 清理、日预算复位、预算对账、DLT 重放、去重表保留期清理）
 ├─ config/              BidPulseProperties 与各组件装配（含 Kafka 主题/错误处理/AdminClient）
-└─ entity/              ad / bid_log 实体
+└─ entity/              ad / bid_log 等持久化实体
 
 src/test/java/com/bidpulse         测试包与主代码一一对应
 ├─ BidFlowTest          端到端（真连 MySQL / Redis / Kafka）
 ├─ api/                 HTTP 边界错误（404 / 415）
 ├─ bid/                 二价定价、兜底广告缓存
+├─ auth/                登录、角色矩阵、安全过滤链
+├─ audit/               审计过滤
 ├─ breaker/             Sentinel 熔断门
-├─ config/              配置绑定、Kafka 重试策略
+├─ config/              配置绑定、Kafka 重试策略、时区守卫
+├─ console/             控制台 REST 契约、查询、CORS
 ├─ job/                 预算对账、DLT 重放
+├─ admin/               广告管理、事务回滚/提交
 └─ infra/
    ├─ kafka/            消费模板错误分类
    └─ redis/            预算扣减、冷启动重建与预算同步
@@ -454,8 +464,12 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 其它目录：
 
-- `sql/`：`all-schema.sql`（统一 DDL）+ `seed-demo.sql`（轻量演示造数）
+- `sql/`：`all-schema.sql`（统一 DDL，含 `audit_log`）+ `seed-demo.sql`（轻量演示造数）
 - `tools/`：大规模造数脚本、SQL 基准、兜底率压测脚本
+- `docs/`：文档索引、结构说明、重构记录；本地深度文档在 `docs/local/`（gitignored）
+- `data/`：`tools/` 生成的本地数据（gitignored，不入库）
+
+完整目录职责、包边界和「改功能看哪里」见 [`docs/architecture.md`](docs/architecture.md)。
 
 ---
 

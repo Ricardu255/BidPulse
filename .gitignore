@@ -22,9 +22,7 @@ src/main/resources/static/console/
 /target/
 
 # 本地文档与图片，不上传
-数据库设计说明.md
-项目知识文档.md
-项目学习指南.md
+/docs/local/
 *.jpg
 *.jpeg
 *.png
