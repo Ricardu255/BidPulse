@@ -35,7 +35,7 @@ onMounted(load)
   <div class="page">
     <PageHeader
       title="审计日志"
-      description="管理员查看控制台与管理端的写操作：谁、在什么时候、对哪个接口做了什么。"
+      description="管理员查看登录、控制台/管理端写操作与 401/403 拒绝事件。"
       tag="仅 ADMIN"
     >
       <template #actions>
@@ -53,7 +53,7 @@ onMounted(load)
       <template #header>
         <div class="card-head">
           <span>最近写操作</span>
-          <span class="hint">只记录非 GET 请求与登录事件；登录只记录用户名，不记录密码。</span>
+          <span class="hint">记录登录、非 GET 写操作与 401/403 拒绝；登录只记录用户名，不记录密码。</span>
         </div>
       </template>
 

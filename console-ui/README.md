@@ -75,7 +75,7 @@ bidpulse:
 | `#/ops` | 运行监控：消费组 lag、DLT 单条/批量重放、预算对账与差异明细 |
 | `#/data` | 数据查询：白名单表浏览、CSV 导出 |
 | `#/experiments` | 演示开关：兜底、强制兜底、频次开关与每小时上限 |
-| `#/audit` | 审计日志：ADMIN 查看写操作与登录事件 |
+| `#/audit` | 审计日志：ADMIN 查看登录、写操作与 401/403 拒绝事件 |
 
 角色：VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admin/**`、读 Actuator 与审计日志。
 

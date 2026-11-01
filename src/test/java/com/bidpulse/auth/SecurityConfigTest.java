@@ -22,6 +22,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,6 +60,9 @@ class SecurityConfigTest {
         mockMvc.perform(get("/console-api/v1/probe"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(401));
+
+        verify(auditService).record(eq("anonymous"), eq("ANONYMOUS"), eq("GET"),
+                eq("/console-api/v1/probe"), eq(401), anyString(), isNull());
     }
 
     @Test
@@ -82,6 +86,9 @@ class SecurityConfigTest {
                 .andExpect(status().isOk());
         mockMvc.perform(put("/console-api/v1/probe").header("Authorization", viewer))
                 .andExpect(status().isForbidden());
+
+        verify(auditService).record(eq("viewer"), eq("VIEWER"), eq("PUT"),
+                eq("/console-api/v1/probe"), eq(403), anyString(), isNull());
     }
 
     @Test

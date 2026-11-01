@@ -13,7 +13,7 @@ BidPulse 是一个前后端分离的 RTB 竞价演示项目：
 - **后端**：Spring Boot 单体，按「HTTP 边界 / 竞价领域 / 基础设施 / 定时任务 / 控制台 BFF」分层；
 - **前端**：独立的 `console-ui/`，Vue 3 + Vite，只通过 `/console-api/v1` 访问后端；
 - **数据**：MySQL 存广告与账单，Redis 存预算/频次，Kafka 承载异步计费事件；
-- **认证**：控制台与 `/admin/**` 使用 Bearer token + 角色；写操作写审计表。
+- **认证**：控制台与 `/admin/**` 使用 Bearer token + 角色；写操作与安全拒绝（401/403）写审计表。
 
 ---
 
@@ -76,7 +76,7 @@ com.bidpulse
 │  └─ TargetingResolver 年龄段/性别等请求参数归一化
 ├─ admin/               广告管理服务（CRUD + 预算同步）
 ├─ auth/                登录、token、角色、安全过滤链
-├─ audit/               写操作审计（filter + service）
+├─ audit/               审计（写操作 + 安全拒绝）
 ├─ console/             控制台 BFF
 │  ├─ api/              /console-api/v1 controller
 │  ├─ command/          运维写动作（DLT 单条重放等）
@@ -154,7 +154,7 @@ console-ui/src
 前端 → /console-api/v1/** → TokenAuthFilter → controller
   → query/ 只读聚合（概览、预算、Kafka、DLT、数据）
   → command/ 运维写动作（重放、对账、暂停消费）
-  → AuditLogFilter 记录写操作
+  → AuditLogFilter 记录写操作；SecurityConfig 记录 401/403 拒绝
 ```
 
 ### 5.3 异步计费

@@ -1,7 +1,9 @@
 package com.bidpulse.auth;
 
 import com.bidpulse.api.ApiResponse;
+import com.bidpulse.audit.AuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +15,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
@@ -42,6 +46,7 @@ public class SecurityConfig {
 
     private final TokenAuthFilter tokenAuthFilter;
     private final ObjectMapper objectMapper;
+    private final AuditService auditService;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -68,10 +73,14 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").hasRole(Role.ADMIN.name())
                         .anyRequest().permitAll())
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, e) ->
-                                writeJson(response, 401, "未登录或登录已过期，请重新登录"))
-                        .accessDeniedHandler((request, response, e) ->
-                                writeJson(response, 403, "当前角色无权执行该操作")))
+                        .authenticationEntryPoint((request, response, e) -> {
+                            auditDenied(request, 401);
+                            writeJson(response, 401, "未登录或登录已过期，请重新登录");
+                        })
+                        .accessDeniedHandler((request, response, e) -> {
+                            auditDenied(request, 403);
+                            writeJson(response, 403, "当前角色无权执行该操作");
+                        }))
                 .addFilterBefore(tokenAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
@@ -80,6 +89,19 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return new InMemoryUserDetailsManager();
+    }
+
+    /** 被安全层拒绝的请求也写审计：403/401 同样需要回答“谁在什么时候尝试了什么”。 */
+    private void auditDenied(HttpServletRequest request, int status) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String actor = "anonymous";
+        String role = "ANONYMOUS";
+        if (authentication != null && authentication.getPrincipal() instanceof AuthPrincipal principal) {
+            actor = principal.username();
+            role = principal.role().name();
+        }
+        auditService.record(actor, role, request.getMethod(), request.getRequestURI(), status,
+                AuditService.clientIp(request), request.getQueryString());
     }
 
     private void writeJson(HttpServletResponse response, int status, String message) throws IOException {

@@ -433,7 +433,7 @@ src/main/java/com/bidpulse
 ├─ bid/                 竞价领域：BidService、PricingPolicy、FallbackAdProvider、TargetingResolver
 ├─ admin/               管理端服务
 ├─ auth/                登录、Bearer token、角色与安全过滤链
-├─ audit/               写操作审计（filter + service）
+├─ audit/               审计：写操作、登录与被拒绝的 401/403
 ├─ console/             控制台 BFF：api / command / query / dto / config
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
@@ -451,7 +451,7 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 ├─ api/                 HTTP 边界错误（404 / 415）
 ├─ bid/                 二价定价、兜底广告缓存
 ├─ auth/                登录、角色矩阵、安全过滤链
-├─ audit/               审计过滤
+├─ audit/               审计过滤（写操作 + 安全拒绝）
 ├─ breaker/             Sentinel 熔断门
 ├─ config/              配置绑定、Kafka 重试策略、时区守卫
 ├─ console/             控制台 REST 契约、查询、CORS
