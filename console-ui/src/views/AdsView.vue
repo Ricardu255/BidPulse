@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AdStatusTag from '@/components/AdStatusTag.vue'
 import { onMounted, reactive, ref } from 'vue'
@@ -285,7 +286,7 @@ onMounted(() => load(1))
     </PageHeader>
 
     <el-card class="panel" shadow="never">
-      <div class="filters">
+      <FilterBar>
         <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 140px">
           <el-option :value="1" label="在投" />
           <el-option :value="2" label="暂停" />
@@ -300,7 +301,7 @@ onMounted(() => load(1))
         <el-input v-model="filters.titleLike" placeholder="标题包含…" clearable style="width: 200px" />
         <el-button type="primary" :loading="loading" @click="search">查询</el-button>
         <el-button @click="reset">重置</el-button>
-      </div>
+      </FilterBar>
     </el-card>
 
     <el-card class="panel" shadow="never">

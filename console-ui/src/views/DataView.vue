@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -72,7 +73,7 @@ onMounted(load)
     />
 
     <el-card class="panel" shadow="never">
-      <div class="filters">
+      <FilterBar>
         <el-select v-model="table" style="width: 230px" @change="load">
           <el-option v-for="item in tables" :key="item.value" :value="item.value" :label="item.label" />
         </el-select>
@@ -92,7 +93,7 @@ onMounted(load)
         <el-button type="primary" :loading="loading" @click="load">查询</el-button>
         <el-button :disabled="!data?.rows.length" @click="exportCsv">导出当前结果 CSV</el-button>
         <el-button v-if="error" @click="load">重试</el-button>
-      </div>
+      </FilterBar>
     </el-card>
 
     <el-card class="panel" shadow="never">

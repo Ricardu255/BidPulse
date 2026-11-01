@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AdStatusTag from '@/components/AdStatusTag.vue'
 import MetricCard from '@/components/MetricCard.vue'
@@ -122,7 +123,7 @@ onMounted(refresh)
     />
 
     <el-card class="panel" shadow="never">
-      <div class="filters">
+      <FilterBar>
         <span class="filter-label">广告 ID</span>
         <el-input-number
           v-model="session.adId"
@@ -142,7 +143,7 @@ onMounted(refresh)
         <el-button :loading="loading" @click="refresh(true)">刷新</el-button>
         <el-switch v-model="auto" active-text="自动刷新" />
         <span class="hint">竞价后会自动带入最近一次胜出广告与 userId。</span>
-      </div>
+      </FilterBar>
     </el-card>
 
     <el-alert v-if="notFound" type="warning" :closable="false" show-icon class="panel">

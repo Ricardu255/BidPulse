@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import { computed, onMounted, ref } from 'vue'
@@ -233,13 +234,13 @@ onMounted(() => {
     <el-tabs v-model="activeTab" class="ops-tabs">
       <el-tab-pane label="消费组" name="groups">
         <el-card class="panel" shadow="never">
-          <div class="filters">
+          <FilterBar>
             <el-button :loading="loading" @click="refreshGroups">刷新</el-button>
             <el-button type="warning" plain @click="pause">暂停消费</el-button>
             <el-button type="success" plain @click="resume">恢复消费</el-button>
             <el-switch v-model="auto" active-text="自动刷新（2s）" />
             <span class="hint">lag = end - committed，负值按 0 处理。</span>
-          </div>
+          </FilterBar>
         </el-card>
 
         <div class="group-grid">
@@ -274,7 +275,7 @@ onMounted(() => {
 
       <el-tab-pane label="DLT 重放" name="dlt">
         <el-card class="panel" shadow="never">
-          <div class="filters">
+          <FilterBar>
             <span class="hint">最近 DLT 消息（含已处理/已跳过）</span>
             <span class="filter-label">拉取条数</span>
             <el-input-number v-model="dltLimit" :min="1" :max="50" :precision="0" size="small" />
@@ -284,7 +285,7 @@ onMounted(() => {
             <el-button size="small" type="warning" plain :loading="replaying" @click="triggerReplay">
               批量重放
             </el-button>
-          </div>
+          </FilterBar>
         </el-card>
 
         <el-alert
@@ -345,13 +346,13 @@ onMounted(() => {
 
       <el-tab-pane label="预算对账" name="recon">
         <el-card class="panel" shadow="never">
-          <div class="filters">
+          <FilterBar>
             <el-button size="small" :loading="reconLoading" @click="refreshRecon">刷新</el-button>
             <el-button size="small" type="primary" :loading="reconRunning" @click="triggerRecon">
               立即对账
             </el-button>
             <span class="hint">Redis 低于账单自动修复；高于账单只告警。</span>
-          </div>
+          </FilterBar>
         </el-card>
 
         <template v-if="recon">
