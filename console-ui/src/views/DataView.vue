@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { getData } from '@/api/console'
 import type { DataView } from '@/api/types'
 import { errorText } from '@/format'
+import { toCsv } from '@/csv'
 
 const tables = [
   { value: 'bid_log', label: '竞价明细 bid_log' },
@@ -47,18 +48,8 @@ async function load(): Promise<void> {
 
 function exportCsv(): void {
   if (!data.value) return
-  const escape = (value: unknown) => {
-    let text = String(value ?? '')
-    // 防止 CSV 公式注入：以 = + - @ 或控制字符开头的单元格加前缀单引号
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`
-    return `"${text.replace(/"/g, '""')}"`
-  }
-  const lines = [
-    data.value.columns.map(escape).join(','),
-    ...data.value.rows.map((row) => data.value!.columns.map((column) => escape(row[column])).join(',')),
-  ]
   // BOM 让 Excel 正确识别 UTF-8 中文
-  const blob = new Blob([`﻿${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' })
+  const blob = new Blob([toCsv(data.value.columns, data.value.rows)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url

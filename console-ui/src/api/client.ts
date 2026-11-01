@@ -33,7 +33,9 @@ export async function requestEnvelope<T>(path: string, init?: RequestInit): Prom
   }
 
   if (!response.ok || !body || body.code !== 0) {
-    throw new ApiError(friendlyMessage(response.status, body?.msg), response.status)
+    // HTTP 200 但业务 code 非 0 时，使用业务 code 作为错误状态，避免出现“HTTP 200 却报错”。
+    const status = response.ok ? (body?.code ?? response.status) : response.status
+    throw new ApiError(friendlyMessage(status, body?.msg), status)
   }
   return body
 }

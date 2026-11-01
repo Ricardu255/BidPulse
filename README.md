@@ -439,19 +439,19 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 13 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest' test
+# 等价于只跑下列 14 个类（@Tag("integration") 的用例默认被排除）
+mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest' test
 ```
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界，共 52 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界，共 55 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 52 个纯单测，全量为 79 个（2026-11-01 已在本机三件套上跑通 79/79）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 55 个纯单测，全量为 82 个（2026-11-01 已跑通纯单测 55/55；集成套件此前 79/79 通过）：
 
 ```bash
 docker compose up -d
