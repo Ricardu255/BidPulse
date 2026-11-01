@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
+import MetricCard from '@/components/MetricCard.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -144,36 +145,28 @@ onMounted(refresh)
     </PageHeader>
 
     <div v-if="overview" class="metric-grid six">
-      <div class="metric">
-        <span>今日请求</span>
-        <strong>{{ overview.bidsToday }}</strong>
-        <small>bid_log 今日行数</small>
-      </div>
-      <div class="metric">
-        <span>兜底率</span>
-        <strong>{{ fallbackPercent }}</strong>
-        <small>{{ overview.fallbackToday }} 次兜底</small>
-      </div>
-      <div class="metric">
-        <span>P95 耗时</span>
-        <strong>{{ overview.p95CostMs }} ms</strong>
-        <small>今日最近 1000 条</small>
-      </div>
-      <div class="metric">
-        <span>今日消耗</span>
-        <strong>{{ money(overview.spendToday) }}</strong>
-        <small>billing_event 汇总</small>
-      </div>
-      <div class="metric">
-        <span>活跃广告</span>
-        <strong>{{ overview.activeAds }} / {{ overview.totalAds }}</strong>
-        <small>暂停 {{ overview.pausedAds }} · 耗尽 {{ overview.exhaustedAds }}</small>
-      </div>
-      <div class="metric">
-        <span>Kafka 总 lag</span>
-        <strong>{{ overview.kafkaLag < 0 ? '—' : overview.kafkaLag }}</strong>
-        <small>三个消费组合计</small>
-      </div>
+      <MetricCard label="今日请求" :value="overview.bidsToday" hint="bid_log 今日行数" />
+      <MetricCard
+        label="兜底率"
+        :value="fallbackPercent"
+        :hint="`${overview.fallbackToday} 次兜底`"
+      />
+      <MetricCard label="P95 耗时" :value="`${overview.p95CostMs} ms`" hint="今日最近 1000 条" />
+      <MetricCard
+        label="今日消耗"
+        :value="money(overview.spendToday)"
+        hint="billing_event 汇总"
+      />
+      <MetricCard
+        label="活跃广告"
+        :value="`${overview.activeAds} / ${overview.totalAds}`"
+        :hint="`暂停 ${overview.pausedAds} · 耗尽 ${overview.exhaustedAds}`"
+      />
+      <MetricCard
+        label="Kafka 总 lag"
+        :value="overview.kafkaLag < 0 ? '—' : overview.kafkaLag"
+        hint="三个消费组合计"
+      />
     </div>
 
     <el-card class="panel quick-start" shadow="never">

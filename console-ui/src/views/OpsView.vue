@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
+import MetricCard from '@/components/MetricCard.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -355,29 +356,21 @@ onMounted(() => {
 
         <template v-if="recon">
           <div class="metric-grid">
-            <div class="metric">
-              <span>最近执行</span>
-              <strong class="recon-time">{{ recon.lastRunAt }}</strong>
-              <small>状态 <el-tag :type="reconType(recon.status)" size="small">{{ reconStatusLabel(recon.status) }}</el-tag></small>
-            </div>
-            <div class="metric">
-              <span>对账广告数</span>
-              <strong>{{ recon.adCount }}</strong>
-            </div>
-            <div class="metric">
-              <span>Redis 高于账单</span>
-              <strong>{{ recon.alerted }}</strong>
-              <small>只告警，不调低 spent</small>
-            </div>
-            <div class="metric">
-              <span>按账单修复</span>
-              <strong>{{ recon.repaired }}</strong>
-              <small>DB 高于 Redis 时</small>
-            </div>
-            <div class="metric">
-              <span>耗时</span>
-              <strong>{{ recon.durationMs }} ms</strong>
-            </div>
+            <MetricCard label="最近执行">
+              <template #value><strong class="recon-time">{{ recon.lastRunAt }}</strong></template>
+              <template #hint>
+                <small>
+                  状态
+                  <el-tag :type="reconType(recon.status)" size="small">
+                    {{ reconStatusLabel(recon.status) }}
+                  </el-tag>
+                </small>
+              </template>
+            </MetricCard>
+            <MetricCard label="对账广告数" :value="recon.adCount" />
+            <MetricCard label="Redis 高于账单" :value="recon.alerted" hint="只告警，不调低 spent" />
+            <MetricCard label="按账单修复" :value="recon.repaired" hint="DB 高于 Redis 时" />
+            <MetricCard label="耗时" :value="`${recon.durationMs} ms`" />
           </div>
 
           <el-alert

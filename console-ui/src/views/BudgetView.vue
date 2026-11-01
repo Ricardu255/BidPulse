@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import AdStatusTag from '@/components/AdStatusTag.vue'
+import MetricCard from '@/components/MetricCard.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -154,31 +155,14 @@ onMounted(refresh)
     </el-alert>
 
     <div v-if="budget" class="metric-grid six">
-      <div class="metric">
-        <span>广告</span>
-        <strong>#{{ budget.adId }}</strong>
-        <small>{{ budget.title }}</small>
-      </div>
-      <div class="metric">
-        <span>状态</span>
-        <strong><AdStatusTag :status="budget.status" /></strong>
-      </div>
-      <div class="metric">
-        <span>日预算</span>
-        <strong>{{ money(budget.dailyBudget) }}</strong>
-      </div>
-      <div class="metric">
-        <span>剩余额度</span>
-        <strong>{{ cents(budget.remainingCents) }}</strong>
-      </div>
-      <div class="metric">
-        <span>已消耗</span>
-        <strong>{{ cents(budget.spentCents) }}</strong>
-      </div>
-      <div class="metric">
-        <span>预算 key TTL</span>
-        <strong>{{ ttlLabel(budget.ttlSeconds) }}</strong>
-      </div>
+      <MetricCard label="广告" :value="`#${budget.adId}`" :hint="budget.title" />
+      <MetricCard label="状态">
+        <template #value><AdStatusTag :status="budget.status" /></template>
+      </MetricCard>
+      <MetricCard label="日预算" :value="money(budget.dailyBudget)" />
+      <MetricCard label="剩余额度" :value="cents(budget.remainingCents)" />
+      <MetricCard label="已消耗" :value="cents(budget.spentCents)" />
+      <MetricCard label="预算 key TTL" :value="ttlLabel(budget.ttlSeconds)" />
     </div>
 
     <el-card v-if="budget" class="panel" shadow="never">
@@ -225,21 +209,22 @@ onMounted(refresh)
       />
       <template v-else>
         <div class="metric-grid three">
-          <div class="metric">
-            <span>用户</span>
-            <strong class="mono">{{ frequency.userId }}</strong>
-            <small>adId #{{ frequency.adId }}</small>
-          </div>
-          <div class="metric">
-            <span>本小时成交次数</span>
-            <strong>{{ frequency.count ?? 0 }} / {{ frequency.maxPerHour }}</strong>
-            <small>上限来自 bidpulse.frequency.max-per-hour</small>
-          </div>
-          <div class="metric">
-            <span>频次 key TTL</span>
-            <strong>{{ ttlLabel(frequency.ttlSeconds) }}</strong>
-            <small>freq:u:{userId}:{yyyyMMddHH}</small>
-          </div>
+          <MetricCard
+            label="用户"
+            :hint="`adId #${frequency.adId}`"
+          >
+            <template #value><strong class="mono">{{ frequency.userId }}</strong></template>
+          </MetricCard>
+          <MetricCard
+            label="本小时成交次数"
+            :value="`${frequency.count ?? 0} / ${frequency.maxPerHour}`"
+            hint="上限来自 bidpulse.frequency.max-per-hour"
+          />
+          <MetricCard
+            label="频次 key TTL"
+            :value="ttlLabel(frequency.ttlSeconds)"
+            hint="freq:u:{userId}:{yyyyMMddHH}"
+          />
         </div>
         <div class="progress-block">
           <div class="progress-caption">
