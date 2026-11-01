@@ -439,19 +439,19 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 14 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest' test
+# 等价于只跑下列 15 个类（@Tag("integration") 的用例默认被排除）
+mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest' test
 ```
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界，共 55 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册，共 57 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）与 `BudgetReconJobTest`（3，预算对账）都带 `@Tag("integration")`，共 27 个用例，会真实连接 MySQL / Redis / Kafka。加上 55 个纯单测，全量为 82 个（2026-11-01 已在本机三件套上跑通 82/82）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）与 `DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）都带 `@Tag("integration")`，共 30 个用例，会真实连接 MySQL / Redis / Kafka。加上 57 个纯单测，全量为 87 个（2026-11-01 已在本机三件套上跑通 87/87）：
 
 ```bash
 docker compose up -d
@@ -462,7 +462,7 @@ mvn test -Pfull-tests      # 跑全量（单测 + 集成）
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。
 > 非 Docker 的本机 MySQL 若给 root 设了密码，用 `MYSQL_PASSWORD=xxx` 环境变量覆盖（`application.yml` 已支持）；
-> 缺 Redis / Kafka 时，27 个集成用例会报 `Could not open JDBC Connection` / 连接拒绝。
+> 缺 Redis / Kafka 时，30 个集成用例会报 `Could not open JDBC Connection` / 连接拒绝。
 
 ### CI
 
