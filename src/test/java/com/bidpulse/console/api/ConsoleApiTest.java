@@ -15,7 +15,7 @@ import com.bidpulse.console.dto.TrendPoint;
 import com.bidpulse.console.query.ConsoleOverviewService;
 import com.bidpulse.console.query.ConsoleQueryService;
 import com.bidpulse.console.query.DltQueryService;
-import com.bidpulse.console.query.DltReplayAdminService;
+import com.bidpulse.console.command.DltReplayAdminService;
 import com.bidpulse.entity.Ad;
 import com.bidpulse.infra.persistence.AdMapper;
 import com.bidpulse.job.BudgetReconJob;

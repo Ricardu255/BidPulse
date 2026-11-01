@@ -205,10 +205,5 @@ public class BidPulseProperties {
         private boolean enabled = false;
         /** 是否允许暂停/恢复消费等写操作；只读查询不受影响 */
         private volatile boolean allowWrite = false;
-        /**
-         * 前后端分离部署时允许的前端来源，逗号分隔。
-         * 开发态默认放行 Vite（5173）；同源部署或使用 Vite 代理时不会触发 CORS。
-         */
-        private String allowedOrigins = "http://localhost:5173,http://127.0.0.1:5173";
     }
 }

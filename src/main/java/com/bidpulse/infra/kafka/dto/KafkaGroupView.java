@@ -1,4 +1,4 @@
-package com.bidpulse.console.dto;
+package com.bidpulse.infra.kafka.dto;
 
 import java.util.List;
 

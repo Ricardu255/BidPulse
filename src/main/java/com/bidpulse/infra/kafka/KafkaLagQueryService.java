@@ -1,9 +1,9 @@
-package com.bidpulse.console.query;
+package com.bidpulse.infra.kafka;
 
 import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;
-import com.bidpulse.console.dto.KafkaGroupView;
-import com.bidpulse.console.dto.KafkaPartitionView;
+import com.bidpulse.infra.kafka.dto.KafkaGroupView;
+import com.bidpulse.infra.kafka.dto.KafkaPartitionView;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.ListOffsetsResult;
@@ -44,9 +44,14 @@ public class KafkaLagQueryService {
     public List<KafkaGroupView> groups() {
         List<KafkaGroupView> result = new ArrayList<>(GROUPS.size());
         for (String group : GROUPS) {
-            result.add(loadGroup(group));
+            result.add(group(group));
         }
         return result;
+    }
+
+    /** 查询单个消费组；组不存在时返回 exists=false。 */
+    public KafkaGroupView group(String group) {
+        return loadGroup(group);
     }
 
     public long totalLag() {

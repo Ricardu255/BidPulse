@@ -1,4 +1,4 @@
-package com.bidpulse.console.query;
+package com.bidpulse.console.command;
 
 import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;

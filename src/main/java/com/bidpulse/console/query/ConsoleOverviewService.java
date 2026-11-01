@@ -1,6 +1,7 @@
 package com.bidpulse.console.query;
 
 import com.bidpulse.console.dto.OverviewView;
+import com.bidpulse.infra.kafka.KafkaLagQueryService;
 import com.bidpulse.console.dto.RecentBidView;
 import com.bidpulse.console.dto.TrendPoint;
 import lombok.RequiredArgsConstructor;

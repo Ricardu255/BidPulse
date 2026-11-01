@@ -41,11 +41,10 @@
 --                           ALGORITHM=INPLACE, LOCK=NONE;
 -- =====================================================================
 
-CREATE DATABASE IF NOT EXISTS bidpulse
-  DEFAULT CHARACTER SET utf8mb4
-  DEFAULT COLLATE utf8mb4_0900_ai_ci;
-
-USE bidpulse;
+-- 数据库需由调用方预先创建（docker-compose / CI services 会创建 bidpulse），
+-- 并通过命令末尾的库名指定目标库，例如：
+--   mysql -uroot bidpulse < sql/all-schema.sql
+--   mysql -uroot bidpulse_test < sql/all-schema.sql
 
 -- ---------------------------------------------------------------------
 -- 1. ad · 广告主投放的广告（50 万行）

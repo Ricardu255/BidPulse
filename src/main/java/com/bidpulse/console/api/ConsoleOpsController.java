@@ -5,7 +5,7 @@ import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.console.dto.DltMessageView;
 import com.bidpulse.console.query.DltQueryService;
-import com.bidpulse.console.query.DltReplayAdminService;
+import com.bidpulse.console.command.DltReplayAdminService;
 import com.bidpulse.job.BudgetReconJob;
 import com.bidpulse.job.DltReplayJob;
 import com.bidpulse.job.ReconReportStore;
