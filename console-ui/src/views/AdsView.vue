@@ -226,7 +226,7 @@ onMounted(() => load(1))
             <el-button v-if="canWrite" link type="warning" @click="toggleStatus(row)">
               {{ row.status === 1 ? '暂停' : '恢复' }}
             </el-button>
-            <el-button v-if="canWrite" link type="primary" @click="editBudget(row)">预算</el-button>
+            <el-button v-if="canWrite" link type="primary" @click="editBudget(row)">日预算</el-button>
           </template>
         </el-table-column>
       </el-table>

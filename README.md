@@ -438,7 +438,7 @@ src/main/java/com/bidpulse
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
 │  ├─ persistence/      MyBatis Mapper（AdMapper、AuditLogMapper）
-│  ├─ redis/            预算 Lua 扣减 / 日预算同步 / 频次
+│  ├─ redis/            预算扣减/频次：BudgetService + 脚本/读取/预热拆分
 │  ├─ kafka/            事件发布、消费模板、三个消费组、DLT 错误处理
 │  └─ buffer/           竞价明细 / 耗尽状态本地缓冲
 ├─ breaker/             熔断门（Sentinel + local 基线）
@@ -479,19 +479,19 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 19 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest,AuthServiceTest,SecurityConfigTest,AuditLogFilterTest' test
+# 等价于只跑下列 21 个类（@Tag("integration") 的用例默认被排除）
+mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest,AuthServiceTest,SecurityConfigTest,AuditLogFilterTest,BudgetAmountsTest,BudgetKeysTest' test
 ```
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤，共 72 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算，共 77 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 72 个纯单测，全量为 104 个（2026-11-01 已在本机三件套上跑通 104/104）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 77 个纯单测，全量为 109 个（本轮已跑 77/77 纯单测；集成部分需中间件恢复后回归）：
 
 ```bash
 docker compose up -d

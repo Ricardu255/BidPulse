@@ -52,7 +52,7 @@ onMounted(load)
     <el-card class="panel" shadow="never">
       <template #header>
         <div class="card-head">
-          <span>最近写操作</span>
+          <span>最近审计事件</span>
           <span class="hint">记录登录、非 GET 写操作与 401/403 拒绝；登录只记录用户名，不记录密码。</span>
         </div>
       </template>
@@ -65,7 +65,7 @@ onMounted(load)
             <el-tag size="small" type="info">{{ row.role }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="method" label="方法" width="90" />
+        <el-table-column prop="method" label="方法/事件" width="110" />
         <el-table-column prop="path" label="路径" min-width="260" show-overflow-tooltip />
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">

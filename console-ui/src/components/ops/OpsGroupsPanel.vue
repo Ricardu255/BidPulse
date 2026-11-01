@@ -72,7 +72,7 @@ onMounted(refreshGroups)
       <el-button type="warning" plain :disabled="!canWrite" @click="pause">暂停消费</el-button>
       <el-button type="success" plain :disabled="!canWrite" @click="resume">恢复消费</el-button>
       <el-switch v-model="auto" active-text="自动刷新（2s）" />
-      <span class="hint">lag = end - committed，负值按 0 处理。</span>
+      <span class="hint">积压 lag = 末端位点 end − 已提交位点 committed；负值按 0 处理。</span>
     </FilterBar>
   </el-card>
 
@@ -81,11 +81,11 @@ onMounted(refreshGroups)
       <div class="group-head">
         <strong>{{ group.group }}</strong>
         <el-tag :type="group.exists ? (group.partitionCount ? 'success' : 'warning') : 'info'" size="small">
-          {{ group.exists ? (group.partitionCount ? '已注册' : '无位点') : '未注册' }}
+          {{ group.exists ? (group.partitionCount ? '已提交位点' : '组存在/无提交') : '组不存在' }}
         </el-tag>
       </div>
       <div class="lag" :class="{ hot: group.totalLag > 0 }">{{ group.totalLag }}</div>
-      <small>分区 {{ group.partitionCount }} · 总积压</small>
+      <small>分区 {{ group.partitionCount }} · 总积压（未消费消息数）</small>
     </div>
   </div>
 
@@ -94,9 +94,9 @@ onMounted(refreshGroups)
     <el-table :data="partitions" stripe size="small" max-height="420">
       <el-table-column prop="group" label="消费组" width="180" />
       <el-table-column prop="partition" label="分区" width="80" />
-      <el-table-column prop="committed" label="committed" width="140" />
-      <el-table-column prop="end" label="end" width="140" />
-      <el-table-column label="lag" width="120">
+      <el-table-column prop="committed" label="已提交位点" width="140" />
+      <el-table-column prop="end" label="末端位点" width="140" />
+      <el-table-column label="积压 lag" width="120">
         <template #default="{ row }">
           <el-tag :type="row.lag > 0 ? 'warning' : 'success'" size="small">{{ row.lag }}</el-tag>
         </template>

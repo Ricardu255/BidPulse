@@ -124,7 +124,7 @@ onMounted(refreshDlt)
         </template>
       </el-table-column>
       <el-table-column prop="partition" label="分区" width="80" />
-      <el-table-column prop="offset" label="offset" width="100" />
+      <el-table-column prop="offset" label="位点 offset" width="110" />
       <el-table-column prop="replayCount" label="重放次数" width="100" />
       <el-table-column label="状态" width="100">
         <template #default="{ row }">
@@ -133,7 +133,7 @@ onMounted(refreshDlt)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="key" label="key" width="120" />
+      <el-table-column prop="key" label="消息 key" width="120" />
       <el-table-column prop="timestamp" label="时间" width="170" />
       <el-table-column label="value 预览" min-width="220">
         <template #default="{ row }">{{ preview(row.value) }}</template>

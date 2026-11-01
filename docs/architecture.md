@@ -86,7 +86,9 @@ com.bidpulse
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
 │  ├─ persistence/      AdMapper、AuditLogMapper
-│  ├─ redis/            BudgetService（Lua 原子扣减/频次/播种/对账）
+│  ├─ redis/            BudgetService（编排）+ BudgetLuaScripts（Lua）
+│  │                    + BudgetReader（只读）+ BudgetWarmup（预热）
+│  │                    + BudgetKeys / BudgetAmounts
 │  ├─ kafka/            发布器、消费模板、三个消费组、DLT 错误处理
 │  └─ buffer/           竞价明细 / 耗尽状态本地缓冲
 ├─ breaker/             熔断门（Sentinel + local 基线）
@@ -108,7 +110,7 @@ BidController
      → Kafka publisher + BidDetailBuffer（异步旁路）
 ```
 
-排查时优先看 `BidService` 的编排顺序；定价只改 `PricingPolicy`；预算/频次只改 `BudgetService` 的 Lua 与 key 约定。
+排查时优先看 `BidService` 的编排顺序；定价只改 `PricingPolicy`；预算/频次先看 `BudgetService` 的流程，Lua 在 `BudgetLuaScripts`，key 在 `BudgetKeys`。
 
 ---
 
@@ -173,7 +175,7 @@ billing-event / hourly-preagg / freq-antifraud 三个消费组
 | 想改什么 | 先看 | 备注 |
 |---|---|---|
 | 二价规则、最小加价 | `bid/PricingPolicy` | 纯函数，优先补单测 |
-| 预算/频次原子逻辑 | `infra/redis/BudgetService` | Lua 是权威；先看 key 约定与返回码 |
+| 预算/频次原子逻辑 | `infra/redis/BudgetService` + `BudgetLuaScripts` | Lua 是权威；key 约定看 `BudgetKeys` |
 | 候选检索 SQL | `infra/persistence/AdMapper` + XML | 注意热路径超时与索引基线 |
 | 兜底行为 | `bid/FallbackAdProvider` | 三级缓存/退避，不是简单静态常量 |
 | Kafka 重试/DLT | `infra/kafka` + `job/DltReplayJob` | 位点与幂等语义不要混 |

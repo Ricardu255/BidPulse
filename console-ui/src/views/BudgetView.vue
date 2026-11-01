@@ -186,7 +186,7 @@ onMounted(refresh)
       <div v-else class="progress-block">
         <div class="progress-caption">
           <span>剩余 {{ cents(budget.remainingCents) }} / 日预算 {{ money(budget.dailyBudget) }}</span>
-          <span>{{ budgetPercent.toFixed(1) }}%</span>
+          <span>剩余比例 {{ budgetPercent.toFixed(1) }}%</span>
         </div>
         <el-progress
           :percentage="budgetPercent"

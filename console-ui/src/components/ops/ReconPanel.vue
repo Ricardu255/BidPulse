@@ -24,8 +24,8 @@ function reconStatusLabel(status: string | undefined): string {
 }
 
 function directionLabel(direction: string): string {
-  if (direction === 'REDIS_AHEAD') return 'Redis 多记'
-  if (direction === 'DB_AHEAD') return 'Redis 少记'
+  if (direction === 'REDIS_AHEAD') return 'Redis 消耗高于账单'
+  if (direction === 'DB_AHEAD') return '账单高于 Redis'
   return direction
 }
 
@@ -112,8 +112,8 @@ onMounted(refreshRecon)
         </template>
       </MetricCard>
       <MetricCard label="对账广告数" :value="recon.adCount" />
-      <MetricCard label="Redis 高于账单" :value="recon.alerted" hint="只告警，不调低 spent" />
-      <MetricCard label="按账单修复" :value="recon.repaired" hint="DB 高于 Redis 时" />
+      <MetricCard label="Redis 消耗高于账单" :value="recon.alerted" hint="只告警，不调低 spent" />
+      <MetricCard label="账单高于 Redis（已修复）" :value="recon.repaired" hint="按 DB 账单重算 spent" />
       <MetricCard label="耗时" :value="`${recon.durationMs} ms`" />
     </div>
 
@@ -130,15 +130,15 @@ onMounted(refreshRecon)
       <template #header>差异明细</template>
       <el-table :data="recon.mismatches ?? []" stripe size="small" max-height="360">
         <el-table-column prop="adId" label="adId" width="100" />
-        <el-table-column label="方向" width="130">
+        <el-table-column label="差异方向" width="170">
           <template #default="{ row }">
             <el-tag :type="directionType(row.direction)" size="small">{{ directionLabel(row.direction) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Redis" width="120">
+        <el-table-column label="Redis spent" width="120">
           <template #default="{ row }">{{ cents(row.redisCents) }}</template>
         </el-table-column>
-        <el-table-column label="账单" width="120">
+        <el-table-column label="DB 账单" width="120">
           <template #default="{ row }">{{ cents(row.dbCents) }}</template>
         </el-table-column>
         <el-table-column label="差值" width="120">

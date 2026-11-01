@@ -101,9 +101,9 @@ onMounted(refresh)
         :hint="`暂停 ${overview.pausedAds} · 耗尽 ${overview.exhaustedAds}`"
       />
       <MetricCard
-        label="Kafka 总 lag"
+        label="Kafka 总积压"
         :value="overview.kafkaLag < 0 ? '—' : overview.kafkaLag"
-        hint="三个消费组合计"
+        hint="三个消费组未消费消息合计"
       />
     </div>
 
