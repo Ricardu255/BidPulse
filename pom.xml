@@ -125,6 +125,9 @@
         <configuration>
           <!-- 由 pom 属性驱动：默认排除 integration，-Pfull-tests 时置为 none（不排除任何 tag） -->
           <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+          <!-- 测试 JVM 固定东八区：预算日 key/频次小时 key/概览今日窗口都依赖本地时区，
+               不能让开发者本机与 CI 的时区差异影响断言。 -->
+          <argLine>-Duser.timezone=Asia/Shanghai</argLine>
         </configuration>
       </plugin>
 

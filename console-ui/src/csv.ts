@@ -11,5 +11,5 @@ export function toCsv(columns: string[], rows: Record<string, unknown>[]): strin
     ...rows.map((row) => columns.map((column) => escape(row[column])).join(',')),
   ]
   // BOM 让 Excel 正确识别 UTF-8 中文
-  return `﻿${lines.join('\r\n')}`
+  return `${String.fromCharCode(0xfeff)}${lines.join('\r\n')}`
 }

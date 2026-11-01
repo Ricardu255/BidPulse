@@ -21,7 +21,7 @@ export async function requestEnvelope<T>(path: string, init?: RequestInit): Prom
   let response: Response
   try {
     response = await fetch(`${API_BASE}${path}`, { ...init, headers })
-  } catch (e) {
+  } catch {
     throw new ApiError(friendlyMessage(0), 0)
   }
 

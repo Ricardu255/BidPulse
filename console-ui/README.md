@@ -91,6 +91,7 @@ bidpulse:
 ## 测试
 
 ```bash
+npm run lint      # ESLint 9：Vue + TypeScript
 npm test          # Vitest：格式化、mock 频率上限/分页/数据/实验开关
 npm run test:e2e  # Playwright：mock 模式，自动起 Vite（4173）
 ```
