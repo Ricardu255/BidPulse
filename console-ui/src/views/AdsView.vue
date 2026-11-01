@@ -14,6 +14,8 @@ import {
 } from '@/api/console'
 import type { AdDetail, AdUpsertRequest, AdView } from '@/api/types'
 import { errorText, money } from '@/format'
+import { useAsyncAction } from '@/composables/useAsyncAction'
+import { useDirtyForm } from '@/composables/useDirtyForm'
 
 const filters = reactive<{
   status?: number
@@ -31,7 +33,6 @@ const loading = ref(false)
 
 const drawer = ref(false)
 const detail = ref<AdDetail | null>(null)
-const detailLoading = ref(false)
 
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
@@ -63,7 +64,12 @@ function emptyForm(): AdUpsertRequest {
   }
 }
 
-const adForm = reactive<AdUpsertRequest>(emptyForm())
+const {
+  form: adForm,
+  dirty: formDirty,
+  load: loadForm,
+  markSaved: markFormSaved,
+} = useDirtyForm<AdUpsertRequest>(emptyForm())
 
 function dimLabel(dimType: number): string {
   const labels: Record<number, string> = {
@@ -115,23 +121,27 @@ function reset(): void {
   search()
 }
 
+function notifyError(e: unknown): void {
+  ElMessage({ message: errorText(e), type: 'error', grouping: true })
+}
+
+const { loading: detailLoading, run: loadDetail } = useAsyncAction(
+  async (row: AdView) => {
+    detail.value = await getAdDetail(row.id)
+  },
+  notifyError,
+)
+
 async function openDetail(row: AdView): Promise<void> {
   drawer.value = true
-  detailLoading.value = true
   detail.value = null
-  try {
-    detail.value = await getAdDetail(row.id)
-  } catch (e) {
-    ElMessage.error(errorText(e))
-  } finally {
-    detailLoading.value = false
-  }
+  await loadDetail(row)
 }
 
 function openCreate(): void {
   editingId.value = null
   editingStatus.value = null
-  Object.assign(adForm, emptyForm())
+  loadForm(emptyForm())
   formVisible.value = true
 }
 
@@ -140,7 +150,7 @@ async function openEdit(row: AdView): Promise<void> {
     const data = await getAdDetail(row.id)
     editingId.value = row.id
     editingStatus.value = data.ad.status
-    Object.assign(adForm, {
+    loadForm({
       advertiserId: data.ad.advertiserId,
       title: data.ad.title,
       creativeUrl: data.ad.creativeUrl,
@@ -206,6 +216,7 @@ async function saveAd(): Promise<void> {
       await updateAd(editingId.value, payload)
       ElMessage.success(`已更新广告 #${editingId.value}`)
     }
+    markFormSaved()
     formVisible.value = false
     await load()
   } catch (e) {
@@ -353,7 +364,7 @@ onMounted(() => load(1))
 
     <el-dialog
       v-model="formVisible"
-      :title="editingId == null ? '新建广告' : `编辑广告 #${editingId}`"
+      :title="(editingId == null ? '新建广告' : `编辑广告 #${editingId}`) + (formDirty ? '（未保存）' : '')"
       width="680px"
       destroy-on-close
     >
