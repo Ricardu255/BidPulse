@@ -31,7 +31,7 @@ npm run dev
 npm run dev:mock
 ```
 
-数据来自 `src/api/mock.ts`，可以单独查看页面。打开
+数据来自 `src/api/mocks/`，可以单独查看页面。打开
 `http://localhost:5173/#/playground?autobid=1` 会自动跑一次竞价，方便截图。
 
 ## 构建

@@ -10,14 +10,17 @@ const experiments = ref<ExperimentsView | null>(null)
 const saved = ref<ExperimentsView | null>(null)
 const loading = ref(false)
 const saving = ref(false)
+const loadError = ref('')
 
 async function load(): Promise<void> {
   loading.value = true
+  loadError.value = ''
   try {
     experiments.value = await getExperiments()
     saved.value = { ...experiments.value }
   } catch (e) {
-    ElMessage({ message: errorText(e), type: 'error', grouping: true })
+    loadError.value = errorText(e)
+    ElMessage({ message: loadError.value, type: 'error', grouping: true })
   } finally {
     loading.value = false
   }
@@ -148,6 +151,17 @@ onMounted(load)
         </div>
       </div>
     </el-card>
+
+    <el-result
+      v-else-if="loadError"
+      icon="error"
+      title="加载失败"
+      :sub-title="loadError"
+    >
+      <template #extra>
+        <el-button type="primary" @click="load">重试</el-button>
+      </template>
+    </el-result>
 
     <el-empty v-else v-loading="loading" description="加载实验中" />
   </div>

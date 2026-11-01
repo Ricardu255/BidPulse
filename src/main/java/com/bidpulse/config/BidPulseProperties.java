@@ -79,8 +79,8 @@ public class BidPulseProperties {
 
     @Data
     public static class Fallback {
-        /** 兜底总开关；false 仅用于 A/B 对照实验 */
-        private boolean enabled = true;
+        /** 兜底总开关；false 仅用于 A/B 对照实验（控制台可运行时切换） */
+        private volatile boolean enabled = true;
         /** 强制兜底：复现「依赖全面故障」 */
         private volatile boolean force = false;
         /** 兜底广告本地缓存时长（ms）：正常时最多这么久访问一次 Redis */
