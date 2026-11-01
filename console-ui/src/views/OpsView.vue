@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getDltMessages,
@@ -13,13 +13,13 @@ import {
 } from '@/api/console'
 import type { DltMessageView, DltReplayStats, KafkaGroupView, ReconReport } from '@/api/types'
 import { cents, errorText } from '@/format'
+import { usePolling } from '@/composables/usePolling'
 
 const activeTab = ref<'groups' | 'dlt' | 'recon'>('groups')
 
 const groups = ref<KafkaGroupView[]>([])
 const loading = ref(false)
 const auto = ref(true)
-let timer: ReturnType<typeof setInterval> | undefined
 
 const dltMessages = ref<DltMessageView[]>([])
 const dltLoading = ref(false)
@@ -211,32 +211,13 @@ async function triggerRecon(): Promise<void> {
   }
 }
 
-function stopTimer(): void {
-  if (timer) {
-    clearInterval(timer)
-    timer = undefined
-  }
-}
-
-function startTimer(): void {
-  stopTimer()
-  // 只在“消费组”页签轮询 lag；切到 DLT/对账后停止，避免后台无效请求和重复报错。
-  if (auto.value && activeTab.value === 'groups') {
-    timer = setInterval(refreshGroups, 2000)
-  }
-}
-
-watch(auto, startTimer)
-watch(activeTab, startTimer)
+usePolling(refreshGroups, 2000, () => auto.value && activeTab.value === 'groups')
 
 onMounted(() => {
   refreshGroups()
   refreshDlt()
   refreshRecon()
-  startTimer()
 })
-
-onUnmounted(stopTimer)
 </script>
 
 <template>

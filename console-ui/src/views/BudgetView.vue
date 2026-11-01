@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { getBudget, getFrequency } from '@/api/console'
@@ -7,6 +7,7 @@ import { ApiError } from '@/api/client'
 import type { BudgetView, FrequencyView } from '@/api/types'
 import { cents, errorText, money, percent, ttlLabel } from '@/format'
 import { session } from '@/session'
+import { usePolling } from '@/composables/usePolling'
 
 type TagType = 'success' | 'warning' | 'danger' | 'info'
 
@@ -16,7 +17,6 @@ const frequency = ref<FrequencyView | null>(null)
 const loading = ref(false)
 const notFound = ref(false)
 const auto = ref(true)
-let timer: ReturnType<typeof setInterval> | undefined
 
 const budgetPercent = computed(() => {
   if (budget.value?.remainingCents == null || !budget.value.dailyBudget) return 0
@@ -133,28 +133,9 @@ function openAds(): void {
   router.push('/ads')
 }
 
-function stopTimer(): void {
-  if (timer) {
-    clearInterval(timer)
-    timer = undefined
-  }
-}
+usePolling(refresh, 2000, auto)
 
-function startTimer(): void {
-  stopTimer()
-  if (auto.value) {
-    timer = setInterval(refresh, 2000)
-  }
-}
-
-watch(auto, startTimer)
-
-onMounted(() => {
-  refresh()
-  startTimer()
-})
-
-onUnmounted(stopTimer)
+onMounted(refresh)
 </script>
 
 <template>

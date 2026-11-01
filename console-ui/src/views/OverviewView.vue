@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getOverview, getRecentBids } from '@/api/console'
 import type { OverviewView, RecentBidView } from '@/api/types'
 import { errorText, money } from '@/format'
+import { usePolling } from '@/composables/usePolling'
 
 const router = useRouter()
 const overview = ref<OverviewView | null>(null)
@@ -13,7 +14,6 @@ const recentAll = ref<RecentBidView[]>([])
 const loading = ref(false)
 const auto = ref(true)
 const recentDrawer = ref(false)
-let timer: ReturnType<typeof setInterval> | undefined
 
 const maxBids = computed(() => {
   const points = overview.value?.trend ?? []
@@ -123,28 +123,9 @@ async function refresh(): Promise<void> {
   }
 }
 
-function stopTimer(): void {
-  if (timer) {
-    clearInterval(timer)
-    timer = undefined
-  }
-}
+usePolling(refresh, 5000, auto)
 
-function startTimer(): void {
-  stopTimer()
-  if (auto.value) {
-    timer = setInterval(refresh, 5000)
-  }
-}
-
-watch(auto, startTimer)
-
-onMounted(() => {
-  refresh()
-  startTimer()
-})
-
-onUnmounted(stopTimer)
+onMounted(refresh)
 </script>
 
 <template>
