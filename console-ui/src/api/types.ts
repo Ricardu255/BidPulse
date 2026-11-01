@@ -229,3 +229,15 @@ export interface BurstRow {
   wallMs: number | null
   error: string | null
 }
+
+export interface AuditLogView {
+  id: number
+  actor: string
+  role: string
+  method: string
+  path: string
+  status: number
+  ip: string
+  detail: string
+  createdAt: string
+}

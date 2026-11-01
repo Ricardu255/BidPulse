@@ -241,3 +241,100 @@
   word-break: break-all;
 }
 
+
+/* ---------- 登录 / 账号 ---------- */
+.user-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--bp-line);
+  border-radius: 999px;
+  background: var(--bp-panel-soft);
+  color: var(--bp-ink-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-brand strong {
+  display: block;
+  color: var(--bp-ink);
+  font-size: 20px;
+  letter-spacing: 0.03em;
+}
+
+.login-brand small {
+  display: block;
+  margin-top: 2px;
+  color: var(--bp-muted);
+  font-size: 12px;
+}
+
+.login-card {
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid var(--bp-line);
+  border-radius: 18px;
+  background: var(--bp-panel);
+  box-shadow: var(--bp-shadow);
+}
+
+.login-card h1 {
+  margin: 0 0 8px;
+  color: var(--bp-ink);
+  font-size: 22px;
+}
+
+.login-sub {
+  margin: 0 0 22px;
+  color: var(--bp-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.login-error {
+  margin-bottom: 14px;
+}
+
+.login-submit {
+  width: 100%;
+}
+
+.login-hint {
+  margin-top: 22px;
+  padding: 12px 14px;
+  border: 1px dashed var(--bp-line-strong);
+  border-radius: 11px;
+  background: var(--bp-panel-soft);
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.login-hint strong {
+  color: var(--bp-ink-soft);
+}
+
+.login-hint p {
+  margin: 5px 0 0;
+}
+
+.login-hint code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bp-primary-soft);
+  color: var(--bp-primary-deep);
+  font-size: 11px;
+}

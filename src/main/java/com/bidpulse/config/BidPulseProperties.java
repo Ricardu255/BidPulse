@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * {@code bidpulse.*} 配置的唯一入口。
@@ -37,6 +39,7 @@ public class BidPulseProperties {
     private Budget budget = new Budget();
     private Frequency frequency = new Frequency();
     private Console console = new Console();
+    private Auth auth = new Auth();
 
     @Data
     public static class Timeout {
@@ -205,5 +208,29 @@ public class BidPulseProperties {
         private boolean enabled = false;
         /** 是否允许暂停/恢复消费等写操作；只读查询不受影响 */
         private volatile boolean allowWrite = false;
+    }
+
+    /**
+     * 控制台与管理端认证配置。
+     *
+     * <p>密码只从环境变量注入，不写入仓库；未配置时启动会生成一次性随机密码并在日志中提示，
+     * 仅用于本地演示。生产必须显式设置 {@code BIDPULSE_AUTH_SECRET} 与各账号密码。
+     */
+    @Data
+    public static class Auth {
+        /** Bearer token 有效期（秒），默认 8 小时 */
+        private long tokenTtlSeconds = 28800;
+        /** HMAC-SHA256 签名密钥；为空时启动生成随机密钥，重启后旧 token 失效 */
+        private String secret = "";
+        /** 用户名 -> 账号配置 */
+        private Map<String, AuthUser> users = new LinkedHashMap<>();
+    }
+
+    @Data
+    public static class AuthUser {
+        /** 明文密码只从环境变量/测试配置注入，启动后立即编码，不持久化 */
+        private String password = "";
+        /** VIEWER / OPERATOR / ADMIN */
+        private String role = "VIEWER";
     }
 }

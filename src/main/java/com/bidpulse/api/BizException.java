@@ -44,6 +44,11 @@ public class BizException extends RuntimeException {
         return new BizException(403, msg);
     }
 
+    /** 401：未登录、凭据错误或 token 过期 */
+    public static BizException unauthorized(String msg) {
+        return new BizException(401, msg);
+    }
+
     /** 503：依赖暂时不可用（如 Kafka 管理查询失败/超时） */
     public static BizException unavailable(String msg) {
         return new BizException(503, msg);

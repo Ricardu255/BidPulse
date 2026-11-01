@@ -1,5 +1,21 @@
 import { expect, test } from '@playwright/test'
 
+const live = !!process.env.E2E_BASE_URL
+
+test.beforeEach(async ({ page }) => {
+  if (!live) return
+  const username = process.env.E2E_USERNAME
+  const password = process.env.E2E_PASSWORD
+  if (!username || !password) {
+    throw new Error('真实后端 E2E 需要 E2E_USERNAME / E2E_PASSWORD')
+  }
+  await page.goto('/#/login')
+  await page.getByPlaceholder('例如 viewer / operator / admin').fill(username)
+  await page.getByPlaceholder('请输入密码').fill(password)
+  await page.getByRole('button', { name: '登录' }).click()
+  await expect(page).not.toHaveURL(/#\/login/, { timeout: 10_000 })
+})
+
 test('overview renders KPI and health', async ({ page }) => {
   await page.goto('/#/overview')
   await expect(page.locator('h1')).toHaveText('首页')
@@ -81,4 +97,10 @@ test('help drawer explains the pages', async ({ page }) => {
   await expect(page.getByText('推荐演示顺序')).toBeVisible()
   await expect(page.getByText('模拟竞价：亲手发一次请求')).toBeVisible()
   await page.getByRole('button', { name: '知道了' }).click()
+})
+
+test('admin can open audit log', async ({ page }) => {
+  await page.goto('/#/audit')
+  await expect(page.locator('h1')).toHaveText('审计日志')
+  await expect(page.getByText('最近写操作')).toBeVisible()
 })

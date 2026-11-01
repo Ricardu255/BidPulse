@@ -37,6 +37,12 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
+    <!-- Spring Security：控制台/管理端登录、角色权限与统一 401/403 响应 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
     <!-- Bean Validation：@Valid 入参校验（Spring Boot 3 起 Web starter 不再自带） -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

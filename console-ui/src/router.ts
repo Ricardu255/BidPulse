@@ -1,10 +1,17 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { auth, isLoggedIn } from '@/auth'
+import type { Role } from '@/auth'
 
 const router = createRouter({
   // hash 路由：前端单独部署时不需要后端做 SPA fallback
   history: createWebHashHistory(),
   routes: [
     { path: '/', redirect: '/overview' },
+    {
+      path: '/login',
+      component: () => import('@/views/LoginView.vue'),
+      meta: { title: '登录', public: true },
+    },
     {
       path: '/overview',
       component: () => import('@/views/OverviewView.vue'),
@@ -40,8 +47,27 @@ const router = createRouter({
       component: () => import('@/views/ExperimentsView.vue'),
       meta: { title: '演示开关' },
     },
+    {
+      path: '/audit',
+      component: () => import('@/views/AuditView.vue'),
+      meta: { title: '审计日志', roles: ['ADMIN'] },
+    },
     { path: '/:pathMatch(.*)*', redirect: '/overview' },
   ],
+})
+
+router.beforeEach((to) => {
+  if (to.meta.public === true) {
+    return isLoggedIn() && to.path === '/login' ? '/overview' : true
+  }
+  if (!isLoggedIn()) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+  const roles = to.meta.roles as Role[] | undefined
+  if (roles && auth.user && !roles.includes(auth.user.role)) {
+    return '/overview'
+  }
+  return true
 })
 
 export default router

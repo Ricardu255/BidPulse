@@ -25,6 +25,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.bidpulse.audit.AuditService;
+import com.bidpulse.auth.AuthService;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -55,6 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         ConsoleOpsController.class,
         ConsoleDataController.class
 })
+@AutoConfigureMockMvc(addFilters = false)
 @TestPropertySource(properties = {
         "bidpulse.console.enabled=true",
         "bidpulse.console.allowed-origins=http://localhost:5173"
@@ -63,6 +67,11 @@ class ConsoleApiTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private AuthService authService;
+    @MockBean
+    private AuditService auditService;
 
     @MockBean
     private BidService bidService;

@@ -245,9 +245,26 @@ bidpulse:
   console:
     # 本地演示控制台：只读查询 + 消费组暂停/恢复。
     # 前端是独立的 console-ui/ 工程，这里只提供 REST 接口。
-    # 仅用于本地/演示环境；部署到非本地前必须加鉴权。
+    # 登录/角色由 bidpulse.auth 控制；对外部署仍建议接企业 SSO/MFA 与网络 ACL。
     enabled: true
-    # 写操作开关：关闭后只保留查询，暂停/恢复接口返回 403
+    # 额外全局写开关：关闭后写接口返回 403（角色校验仍然生效）
     allow-write: true
     # 前后端分开部署时允许的前端来源（逗号分隔）；开发态为 Vite 默认端口
     allowed-origins: "http://localhost:5173,http://127.0.0.1:5173"
+
+  auth:
+    # 演示登录：密码只从环境变量注入，不写入仓库。
+    # 未配置密码时启动会生成一次性随机密码并打到日志，仅用于本地演示。
+    # 生产至少设置 BIDPULSE_AUTH_SECRET + BIDPULSE_ADMIN_PASSWORD（以及需要的 operator/viewer）。
+    token-ttl-seconds: 28800
+    secret: ${BIDPULSE_AUTH_SECRET:}
+    users:
+      admin:
+        password: ${BIDPULSE_ADMIN_PASSWORD:}
+        role: ADMIN
+      operator:
+        password: ${BIDPULSE_OPERATOR_PASSWORD:}
+        role: OPERATOR
+      viewer:
+        password: ${BIDPULSE_VIEWER_PASSWORD:}
+        role: VIEWER

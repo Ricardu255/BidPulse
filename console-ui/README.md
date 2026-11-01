@@ -8,12 +8,18 @@
 
 ## 开发
 
-后端先启动（默认 8080）：
+后端先启动（默认 8080）。登录密码通过环境变量注入，不写入仓库：
 
 ```bash
 cd ..
+BIDPULSE_AUTH_SECRET='<至少 32 字节随机串>' \
+BIDPULSE_ADMIN_PASSWORD='<管理员密码>' \
+BIDPULSE_OPERATOR_PASSWORD='<操作员密码>' \
+BIDPULSE_VIEWER_PASSWORD='<只读密码>' \
 mvn spring-boot:run
 ```
+
+未配置密码时，后端启动日志会生成一次性随机密码（仅本地演示）。
 
 前端独立启动（默认 5173，`/console-api` 代理到 8080）：
 
@@ -31,7 +37,7 @@ npm run dev
 npm run dev:mock
 ```
 
-数据来自 `src/api/mocks/`，可以单独查看页面。打开
+数据来自 `src/api/mocks/`，可以单独查看页面。mock 模式自动以管理员身份进入，不需要登录。打开
 `http://localhost:5173/#/playground?autobid=1` 会自动跑一次竞价，方便截图。
 
 ## 构建
@@ -61,6 +67,7 @@ bidpulse:
 
 | 路由 | 内容 |
 |---|---|
+| `#/login` | 登录：用户名/密码换 Bearer token；mock 模式自动进入 |
 | `#/overview` | 首页：KPI、健康/熔断、结果分布、趋势、最近竞价 |
 | `#/playground` | 模拟竞价：候选列表、二价结果、连打 4 次 |
 | `#/ads` | 广告管理：列表、详情/定向、新建/编辑、暂停恢复、调日预算 |
@@ -68,6 +75,9 @@ bidpulse:
 | `#/ops` | 运行监控：消费组 lag、DLT 单条/批量重放、预算对账与差异明细 |
 | `#/data` | 数据查询：白名单表浏览、CSV 导出 |
 | `#/experiments` | 演示开关：兜底、强制兜底、频次开关与每小时上限 |
+| `#/audit` | 审计日志：ADMIN 查看写操作与登录事件 |
+
+角色：VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admin/**`、读 Actuator 与审计日志。
 
 ## 未实现（后续）
 
@@ -75,7 +85,7 @@ bidpulse:
 |---|---|---|
 | 故障注入 / demo 重置 | 未做 | 需要更严格的环境隔离与二次确认 |
 | 告警规则 / 通知 | 未做 | 目前只有概览里的熔断状态与对账告警数 |
-| 登录 / 权限 / 审计 | 未做 | 对外部署前必须补 |
+| SSO / MFA | 未做 | 当前是本地账号 + Bearer token；对外部署接企业身份源 |
 | SSE / WebSocket 实时推送 | 未做 | 当前为 2–5s 轮询，接口层可替换 |
 
 ## 常见问题
@@ -99,13 +109,13 @@ npm run test:e2e  # Playwright：mock 模式，自动起 Vite（4173）
 对真实后端联调：
 
 ```bash
-# 先启动后端 8080 和 npm run dev（5173）
-E2E_BASE_URL=http://127.0.0.1:5173 npm run test:e2e
+# 先启动后端 8080 和 npm run dev（5173）；账号密码来自后端环境变量
+E2E_BASE_URL=http://127.0.0.1:5173 E2E_USERNAME=admin E2E_PASSWORD='<密码>' npm run test:e2e
 ```
 
 ## 边界
 
-- 当前支持只读展示、广告新建/编辑、暂停/恢复、调日预算、DLT 重放、手动对账、消费组暂停/恢复、运行时开关。
+- 当前支持登录/角色、只读展示、广告新建/编辑、暂停/恢复、调日预算、DLT 重放、手动对账、消费组暂停/恢复、运行时开关与审计日志。
 - 打开预算页不会播种预算或创建频次 key。
-- `bidpulse.console.allow-write=false` 时写操作返回 403。
-- 控制台接口默认只适合本地演示；对外部署前必须加鉴权。
+- `bidpulse.console.allow-write=false` 时写操作返回 403；它是登录/角色之外的额外全局写开关。
+- 真实账号密码只从 `BIDPULSE_*_PASSWORD` 环境变量注入；未配置时后端日志生成一次性随机密码。

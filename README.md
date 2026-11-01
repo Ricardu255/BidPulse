@@ -40,7 +40,7 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 - **可演示、可排查**：独立控制台展示竞价、预算/频次、异步链路、数据表与运行时开关。
 
 **它不是**：完整广告平台、生产级集群方案、真实广告主/素材审核系统。单实例、Kafka RF=1、Redis 未开持久化，
-都是 demo 边界；控制台默认无鉴权，只适合本地演示。
+都是 demo 边界；控制台已带本地账号 token/RBAC 与审计，但未接 SSO/MFA，仍不建议直接公网暴露。
 
 ### 控制台预览
 
@@ -155,7 +155,7 @@ docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/all-schema.sql
 docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/seed-demo.sql
 ```
 
-- `all-schema.sql`：一次建好 7 张表。脚本以 `DROP TABLE` 开头，**重跑会清空数据**，只用于初始化/重置。
+- `all-schema.sql`：一次建好 8 张表。脚本以 `DROP TABLE` 开头，**重跑会清空数据**，只用于初始化/重置。
 - `seed-demo.sql`：200 条广告 + 800 条定向条件，覆盖全部 **105 种「地域 × 年龄 × 性别」检索组合**（年龄 7 桶、性别含 `unknown`），保证任意请求都能命中候选，不会出现空广告。
 - 重复灌数前先执行：`TRUNCATE ad_target; TRUNCATE ad;`。
 
@@ -197,6 +197,18 @@ npm run dev
 
 打开 <http://localhost:5173/>。
 
+控制台登录使用 Bearer token，角色分 VIEWER / OPERATOR / ADMIN。密码只从环境变量注入，不写入仓库：
+
+```bash
+BIDPULSE_AUTH_SECRET='<至少 32 字节的随机串>' \
+BIDPULSE_ADMIN_PASSWORD='<管理员密码>' \
+BIDPULSE_OPERATOR_PASSWORD='<操作员密码>' \
+BIDPULSE_VIEWER_PASSWORD='<只读密码>' \
+mvn spring-boot:run
+```
+
+未配置密码时，启动日志会生成一次性随机密码（仅本地演示）。登录接口为 `POST /console-api/v1/auth/login`，之后请求带 `Authorization: Bearer <token>`。存量库需要补建 `audit_log` 表（见 `sql/all-schema.sql` 第 8 节）；缺失时审计只打应用日志，不影响业务。
+
 单 jar 演示时把前端产物构建到后端静态目录：
 
 ```bash
@@ -205,7 +217,7 @@ npm run build:embedded
 # 打开 http://localhost:8080/console/index.html
 ```
 
-控制台默认开启，写操作（暂停/恢复消费）由配置控制：
+控制台默认开启；登录/角色是主安全闸，`allow-write` 是额外的全局写开关：
 
 ```yaml
 bidpulse:
@@ -213,9 +225,16 @@ bidpulse:
     enabled: true
     allow-write: true
     allowed-origins: "http://localhost:5173"
+  auth:
+    token-ttl-seconds: 28800
+    # 密码只从环境变量注入
+    users:
+      admin:    { password: ${BIDPULSE_ADMIN_PASSWORD:},    role: ADMIN }
+      operator: { password: ${BIDPULSE_OPERATOR_PASSWORD:}, role: OPERATOR }
+      viewer:   { password: ${BIDPULSE_VIEWER_PASSWORD:},   role: VIEWER }
 ```
 
-P0/P1/P2/P3 页面：概览、竞价实验室、广告与投放、预算与频次、Kafka 异步运维（含 DLT 浏览/重放、预算对账）、数据浏览、实验与开关。完整说明见 `console-ui/README.md`。
+P0/P1/P2/P3 页面：概览、竞价实验室、广告与投放、预算与频次、Kafka 异步运维（含 DLT 浏览/重放、预算对账）、数据浏览、实验与开关、审计日志（ADMIN）。完整说明见 `console-ui/README.md`。
 
 ---
 
@@ -249,7 +268,14 @@ P0/P1/P2/P3 页面：概览、竞价实验室、广告与投放、预算与频�
 
 ### 管理端
 
+除 `POST /bid`、health/info、登录接口外，控制台与管理端均需要 Bearer token：
+VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admin/**`、读 Actuator 与审计日志。
+
 | 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/console-api/v1/auth/login` | 用户名/密码换 token |
+| GET | `/console-api/v1/auth/me` | 当前用户与角色 |
+| GET | `/console-api/v1/audit` | 审计日志（仅 ADMIN） |
 |---|---|---|
 | POST | `/admin/ad` | 新建广告（ad 与 target 同事务，至少 1 条定向） |
 | GET | `/admin/ad/{id}` | 详情（含定向条件） |
@@ -439,19 +465,19 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 16 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest' test
+# 等价于只跑下列 19 个类（@Tag("integration") 的用例默认被排除）
+mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest,AuthServiceTest,SecurityConfigTest,AuditLogFilterTest' test
 ```
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫，共 59 个用例。
+覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤，共 72 个用例。
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 59 个纯单测，全量为 91 个（2026-11-01 已在本机三件套上跑通 91/91）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 72 个纯单测，全量为 104 个（2026-11-01 已在本机三件套上跑通 104/104）：
 
 ```bash
 docker compose up -d
@@ -480,7 +506,8 @@ npm run test:e2e  # Playwright：mock 模式自动起 Vite
 真实后端联调：
 
 ```bash
-E2E_BASE_URL=http://127.0.0.1:5173 npm run test:e2e
+# 先启动后端 8080 和 npm run dev（5173）；账号密码来自后端环境变量
+E2E_BASE_URL=http://127.0.0.1:5173 E2E_USERNAME=admin E2E_PASSWORD='<密码>' npm run test:e2e
 ```
 
 ---
@@ -537,7 +564,7 @@ python tools/bench_fallback.py --port 8081 --n 2000 --mode nocand --tag "S2-候�
 
 ## 十一、数据库与升级
 
-7 张表：`ad`、`ad_target`、`bid_log`、`billing_event`、`bid_stat_hourly`、`processed_event`、`ad_freq`。
+7 张业务表 + 1 张审计表：`ad`、`ad_target`、`bid_log`、`billing_event`、`bid_stat_hourly`、`processed_event`、`ad_freq`、`audit_log`。
 详细字段、索引与设计取舍见 `sql/all-schema.sql` 的建表注释。
 
 > `all-schema.sql` 含 `DROP TABLE`，只能用于初始化/重置。存量库升级请执行文件头部注释中的 `ALTER`：
@@ -564,4 +591,4 @@ python tools/bench_fallback.py --port 8081 --n 2000 --mode nocand --tag "S2-候�
 - **死信有限自动重放**：`bid_event.DLT` 由定时任务每 5 分钟限量重放（可解析且未超过 3 次的消息），报文非法或超限的消息保留在 DLT 等人工处理；重放依靠 `processed_event` 幂等，不会重复计费。
 - **去重表清理是安全网**：极高事件量下应改为按时间分区 / `DROP PARTITION`，逐行删除只适合本项目的数据规模。
 - **金额取整**：成交价向下取整到分（对广告主不超额收费），与 Redis 实扣和账单口径一致。
-- **管理端点无鉴权**：`/admin/**` 仅用于本地演示，部署到任何非本地环境前必须加认证。
+- **管理端点需要 ADMIN token**：`/admin/**`、Actuator 指标与审计日志默认仅 ADMIN 可写/可读；生产仍建议叠加企业 SSO、MFA 与网络 ACL。

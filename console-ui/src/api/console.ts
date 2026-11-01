@@ -2,6 +2,7 @@ import { request, requestEnvelope } from './client'
 import {
   mockAdDetail,
   mockAds,
+  mockAuditLogs,
   mockBudget,
   mockChangeAdStatus,
   mockCreateAd,
@@ -28,6 +29,7 @@ import type {
   AdQueryParams,
   AdUpsertRequest,
   AdView,
+  AuditLogView,
   BidRequest,
   BidResult,
   BudgetView,
@@ -223,4 +225,9 @@ export function updateExperiments(update: ExperimentsUpdate): Promise<Experiment
     method: 'PUT',
     body: JSON.stringify(update),
   })
+}
+
+export function getAuditLogs(limit = 50): Promise<AuditLogView[]> {
+  if (USE_MOCK) return mockAuditLogs(limit)
+  return request<AuditLogView[]>(`/audit?limit=${encodeURIComponent(String(limit))}`)
 }

@@ -1,4 +1,5 @@
 import type { ApiEnvelope } from './types'
+import { clearAuth, getToken } from '@/auth'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '/console-api/v1').replace(/\/$/, '')
 
@@ -16,6 +17,10 @@ export async function requestEnvelope<T>(path: string, init?: RequestInit): Prom
   const headers = new Headers(init?.headers)
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
+  }
+  const token = getToken()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
   }
 
   let response: Response
@@ -35,6 +40,12 @@ export async function requestEnvelope<T>(path: string, init?: RequestInit): Prom
   if (!response.ok || !body || body.code !== 0) {
     // HTTP 200 但业务 code 非 0 时，使用业务 code 作为错误状态，避免出现“HTTP 200 却报错”。
     const status = response.ok ? (body?.code ?? response.status) : response.status
+    if (status === 401) {
+      clearAuth()
+      if (typeof window !== 'undefined' && !window.location.hash.startsWith('#/login')) {
+        window.location.hash = '#/login'
+      }
+    }
     throw new ApiError(friendlyMessage(status, body?.msg), status)
   }
   return body
@@ -52,8 +63,10 @@ function friendlyMessage(status: number, serverMsg?: string): string {
   switch (status) {
     case 0:
       return '网络请求失败：请确认后端已启动；若为跨域，请检查 allowed-origins'
+    case 401:
+      return '登录已过期或凭据无效，请重新登录'
     case 403:
-      return '没有权限：控制台写操作可能被关闭，或前端来源未加入 allowed-origins'
+      return '没有权限：当前角色无权执行该操作，或控制台写操作已关闭'
     case 404:
       return '请求的资源不存在'
     case 503:

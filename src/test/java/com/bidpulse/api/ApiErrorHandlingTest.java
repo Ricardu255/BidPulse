@@ -5,6 +5,9 @@ import com.bidpulse.bid.BidService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.bidpulse.audit.AuditService;
+import com.bidpulse.auth.AuthService;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,10 +25,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 会被 {@code @ExceptionHandler(Exception.class)} 吞成 500。
  */
 @WebMvcTest(BidController.class)
+@AutoConfigureMockMvc(addFilters = false)
 class ApiErrorHandlingTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private AuthService authService;
+    @MockBean
+    private AuditService auditService;
 
     @MockBean
     private BidService bidService;

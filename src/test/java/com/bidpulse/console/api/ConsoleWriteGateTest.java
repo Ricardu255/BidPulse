@@ -28,8 +28,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 控制台写开关的契约测试：allow-write=false 时，所有写入口必须 403 且没有副作用。
  *
- * <p>控制台没有鉴权，allow-write 是唯一的安全闸；任何一个新写接口漏写 requireWrite()
- * 都会造成“暂停消费/重放 DLT/改预算/改实验开关”被直接暴露，因此这里逐入口锁住。
+ * <p>控制台已有登录/角色；{@code allow-write} 是额外的全局安全闸：任何一个新写接口漏写
+ * {@code requireWrite()} 都会造成“暂停消费/重放 DLT/改预算/改实验开关”在允许写时被直接暴露，
+ * 因此这里逐入口锁住。
  */
 @ExtendWith(MockitoExtension.class)
 class ConsoleWriteGateTest {

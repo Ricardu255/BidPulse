@@ -1,4 +1,5 @@
 import type {
+  AuditLogView,
   DltMessageView,
   DltReplayStats,
   KafkaGroupView,
@@ -76,6 +77,46 @@ export async function mockReplayDltOne(
 export async function mockRecon(): Promise<ReconReport> {
   await delay(120)
   return { ...state.reconReport }
+}
+
+export async function mockAuditLogs(limit = 50): Promise<AuditLogView[]> {
+  await delay(140)
+  const rows: AuditLogView[] = [
+    {
+      id: 12,
+      actor: 'operator',
+      role: 'OPERATOR',
+      method: 'PUT',
+      path: '/console-api/v1/experiments',
+      status: 200,
+      ip: '127.0.0.1',
+      detail: 'frequencyEnabled=false',
+      createdAt: '2026-11-01 17:42:10',
+    },
+    {
+      id: 11,
+      actor: 'admin',
+      role: 'ADMIN',
+      method: 'POST',
+      path: '/admin/consumer/pause',
+      status: 200,
+      ip: '127.0.0.1',
+      detail: '',
+      createdAt: '2026-11-01 17:40:03',
+    },
+    {
+      id: 10,
+      actor: 'anonymous',
+      role: 'ANONYMOUS',
+      method: 'LOGIN',
+      path: '/console-api/v1/auth/login',
+      status: 401,
+      ip: '127.0.0.1',
+      detail: 'username=viewer',
+      createdAt: '2026-11-01 17:39:22',
+    },
+  ]
+  return rows.slice(0, Math.max(1, Math.min(limit, rows.length)))
 }
 
 export async function mockRunRecon(): Promise<ReconReport> {
