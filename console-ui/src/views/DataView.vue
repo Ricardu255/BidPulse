@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getData } from '@/api/console'
@@ -64,13 +65,11 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>数据查询</h1>
-        <p>排查问题时直接看底层表；只读查询，支持导出 CSV。</p>
-      </div>
-      <el-tag type="info" effect="plain">GET /console-api/v1/data/{table}</el-tag>
-    </header>
+    <PageHeader
+      title="数据查询"
+      description="排查问题时直接看底层表；只读查询，支持导出 CSV。"
+      tag="GET /console-api/v1/data/{table}"
+    />
 
     <el-card class="panel" shadow="never">
       <div class="filters">

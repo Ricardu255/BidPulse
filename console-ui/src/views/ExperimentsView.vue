@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getExperiments, updateExperiments } from '@/api/console'
@@ -57,13 +58,11 @@ onMounted(load)
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>演示开关</h1>
-        <p>演示故障和策略变化：兜底、强制兜底、频次开关；会影响下一次请求。</p>
-      </div>
-      <el-tag type="info" effect="plain">GET /console-api/v1/experiments</el-tag>
-    </header>
+    <PageHeader
+      title="演示开关"
+      description="演示故障和策略变化：兜底、强制兜底、频次开关；会影响下一次请求。"
+      tag="GET /console-api/v1/experiments"
+    />
 
     <el-card v-if="experiments" v-loading="loading" class="panel" shadow="never">
       <template #header>

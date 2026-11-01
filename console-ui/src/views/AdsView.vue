@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
+import AdStatusTag from '@/components/AdStatusTag.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -11,8 +13,6 @@ import {
 } from '@/api/console'
 import type { AdDetail, AdUpsertRequest, AdView } from '@/api/types'
 import { errorText, money } from '@/format'
-
-type TagType = 'success' | 'warning' | 'danger' | 'info'
 
 const filters = reactive<{
   status?: number
@@ -63,20 +63,6 @@ function emptyForm(): AdUpsertRequest {
 }
 
 const adForm = reactive<AdUpsertRequest>(emptyForm())
-
-function statusLabel(status: number): string {
-  if (status === 1) return '在投'
-  if (status === 2) return '暂停'
-  if (status === 3) return '已耗尽'
-  return '未知'
-}
-
-function statusType(status: number): TagType {
-  if (status === 1) return 'success'
-  if (status === 2) return 'warning'
-  if (status === 3) return 'danger'
-  return 'info'
-}
 
 function dimLabel(dimType: number): string {
   const labels: Record<number, string> = {
@@ -286,16 +272,17 @@ onMounted(() => load(1))
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>广告管理</h1>
-        <p>管理可投放广告；新建、编辑、暂停或调预算后，下一次竞价立即生效。</p>
-      </div>
-      <div class="actions">
-        <el-button type="primary" @click="openCreate">新建广告</el-button>
-        <el-tag type="info" effect="plain">GET /console-api/v1/ads</el-tag>
-      </div>
-    </header>
+    <PageHeader
+      title="广告管理"
+      description="管理可投放广告；新建、编辑、暂停或调预算后，下一次竞价立即生效。"
+    >
+      <template #actions>
+        <div class="actions">
+          <el-button type="primary" @click="openCreate">新建广告</el-button>
+          <el-tag type="info" effect="plain">GET /console-api/v1/ads</el-tag>
+        </div>
+      </template>
+    </PageHeader>
 
     <el-card class="panel" shadow="never">
       <div class="filters">
@@ -331,7 +318,7 @@ onMounted(() => load(1))
         </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <AdStatusTag :status="row.status" />
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="160">
@@ -454,9 +441,7 @@ onMounted(() => load(1))
             <el-descriptions-item label="出价">{{ money(detail.ad.bid) }}</el-descriptions-item>
             <el-descriptions-item label="日预算">{{ money(detail.ad.dailyBudget) }}</el-descriptions-item>
             <el-descriptions-item label="状态">
-              <el-tag :type="statusType(detail.ad.status)" size="small">
-                {{ statusLabel(detail.ad.status) }}
-              </el-tag>
+              <AdStatusTag :status="detail.ad.status" />
             </el-descriptions-item>
             <el-descriptions-item label="更新时间">{{ formatTime(detail.ad.updatedAt) }}</el-descriptions-item>
           </el-descriptions>

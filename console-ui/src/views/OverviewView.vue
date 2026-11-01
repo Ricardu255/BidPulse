@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -130,16 +131,17 @@ onMounted(refresh)
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>首页</h1>
-        <p>先看这里：系统是否健康、今天有没有在正常竞价。下面是近 30 分钟趋势和最近请求。</p>
-      </div>
-      <div class="actions">
-        <el-button :loading="loading" @click="refresh">刷新</el-button>
-        <el-switch v-model="auto" active-text="自动刷新（5s）" />
-      </div>
-    </header>
+    <PageHeader
+      title="首页"
+      description="先看这里：系统是否健康、今天有没有在正常竞价。下面是近 30 分钟趋势和最近请求。"
+    >
+      <template #actions>
+        <div class="actions">
+          <el-button :loading="loading" @click="refresh">刷新</el-button>
+          <el-switch v-model="auto" active-text="自动刷新（5s）" />
+        </div>
+      </template>
+    </PageHeader>
 
     <div v-if="overview" class="metric-grid six">
       <div class="metric">

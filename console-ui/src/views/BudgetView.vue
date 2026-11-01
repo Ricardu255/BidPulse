@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
+import AdStatusTag from '@/components/AdStatusTag.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -8,8 +10,6 @@ import type { BudgetView, FrequencyView } from '@/api/types'
 import { cents, errorText, money, percent, ttlLabel } from '@/format'
 import { session } from '@/session'
 import { usePolling } from '@/composables/usePolling'
-
-type TagType = 'success' | 'warning' | 'danger' | 'info'
 
 const router = useRouter()
 const budget = ref<BudgetView | null>(null)
@@ -35,32 +35,6 @@ const budgetProgressStatus = computed<'success' | 'exception'>(() =>
 const frequencyProgressStatus = computed<'success' | 'exception'>(() =>
   frequencyPercent.value >= 100 ? 'exception' : 'success',
 )
-
-const statusLabel = computed(() => {
-  switch (budget.value?.status) {
-    case 1:
-      return '在投'
-    case 2:
-      return '暂停'
-    case 3:
-      return '已耗尽'
-    default:
-      return '未知'
-  }
-})
-
-const statusType = computed<TagType>(() => {
-  switch (budget.value?.status) {
-    case 1:
-      return 'success'
-    case 2:
-      return 'warning'
-    case 3:
-      return 'danger'
-    default:
-      return 'info'
-  }
-})
 
 let refreshSeq = 0
 
@@ -140,13 +114,11 @@ onMounted(refresh)
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>预算与频次</h1>
-        <p>查某个广告今天还剩多少钱、某个用户今天已经看过几次；只读，不会修改预算。</p>
-      </div>
-      <el-tag type="info" effect="plain">GET /console-api/v1/budget · /frequency</el-tag>
-    </header>
+    <PageHeader
+      title="预算与频次"
+      description="查某个广告今天还剩多少钱、某个用户今天已经看过几次；只读，不会修改预算。"
+      tag="GET /console-api/v1/budget · /frequency"
+    />
 
     <el-card class="panel" shadow="never">
       <div class="filters">
@@ -189,7 +161,7 @@ onMounted(refresh)
       </div>
       <div class="metric">
         <span>状态</span>
-        <strong><el-tag :type="statusType">{{ statusLabel }}</el-tag></strong>
+        <strong><AdStatusTag :status="budget.status" /></strong>
       </div>
       <div class="metric">
         <span>日预算</span>

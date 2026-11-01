@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
@@ -116,13 +117,11 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>模拟竞价</h1>
-        <p>模拟一次流量请求，观察候选、二价成交价和频次拦截；不用写代码。</p>
-      </div>
-      <el-tag type="info" effect="plain">POST /console-api/v1/bids</el-tag>
-    </header>
+    <PageHeader
+      title="模拟竞价"
+      description="模拟一次流量请求，观察候选、二价成交价和频次拦截；不用写代码。"
+      tag="POST /console-api/v1/bids"
+    />
 
     <el-card class="panel" shadow="never">
       <template #header>请求参数</template>

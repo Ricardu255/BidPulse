@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageHeader from '@/components/PageHeader.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -222,13 +223,11 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <header class="page-header">
-      <div>
-        <h1>运行监控</h1>
-        <p>看异步链路有没有卡住：消费组 lag、DLT 失败消息、Redis 与账单差异。</p>
-      </div>
-      <el-tag type="info" effect="plain">GET /console-api/v1/kafka/groups</el-tag>
-    </header>
+    <PageHeader
+      title="运行监控"
+      description="看异步链路有没有卡住：消费组 lag、DLT 失败消息、Redis 与账单差异。"
+      tag="GET /console-api/v1/kafka/groups"
+    />
 
     <el-tabs v-model="activeTab" class="ops-tabs">
       <el-tab-pane label="消费组" name="groups">
