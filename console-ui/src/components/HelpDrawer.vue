@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { FALLBACK_AD_ID } from '@/constants'
+
 const visible = defineModel<boolean>({ required: true })
 </script>
 
@@ -17,9 +19,9 @@ const visible = defineModel<boolean>({ required: true })
         </section>
 
         <section class="help-section">
-          <h3>“兜底 999999”是什么意思？</h3>
+          <h3>“兜底 {{ FALLBACK_AD_ID }}”是什么意思？</h3>
           <p>当没有可投放广告（无候选、预算耗尽、依赖故障或超时）时，系统不会返回空广告，而是返回一条固定的
-            保底广告 adId=999999。它的出价只是配置值，payPrice 显示“—”表示不计费；请求结果标记为“兜底”，
+            保底广告 adId={{ FALLBACK_AD_ID }}。它的出价只是配置值，payPrice 显示“—”表示不计费；请求结果标记为“兜底”，
             priceMode=2。</p>
         </section>
 
@@ -38,7 +40,7 @@ const visible = defineModel<boolean>({ required: true })
         <section class="help-section">
           <h3>4. 预算与频次：查广告和用户状态</h3>
           <p>输入 adId 查当天剩余预算、已消耗、TTL；输入 userId 查当前小时已经成交几次。页面只读，不会改预算。
-            演示数据可用 adId <strong>110</strong>；兜底广告 <strong>999999</strong> 不在 ad 表里，所以查不到是正常的。</p>
+            演示数据可用 adId <strong>110</strong>；兜底广告 <strong>{{ FALLBACK_AD_ID }}</strong> 不在 ad 表里，所以查不到是正常的。</p>
         </section>
 
         <section class="help-section">
@@ -65,7 +67,7 @@ const visible = defineModel<boolean>({ required: true })
             <dt>二价</dt><dd>成交价 = min(胜出价, 次高有效出价 + 0.01 元)。</dd>
             <dt>预算</dt><dd>按「广告 × 天」存在 Redis 的剩余额度，扣减前校验，成功后累计 spent。</dd>
             <dt>频次</dt><dd>按「用户 × 广告 × 自然小时」计数，超限只跳过候选，不扣费、不标耗尽。</dd>
-            <dt>兜底 / 999999</dt><dd>没有可投放真实广告时的保底广告；固定 adId=999999，payPrice 为空，不计费。</dd>
+            <dt>兜底 / {{ FALLBACK_AD_ID }}</dt><dd>没有可投放真实广告时的保底广告；固定 adId={{ FALLBACK_AD_ID }}，payPrice 为空，不计费。</dd>
             <dt>priceMode</dt><dd>0 一价、1 二价、2 兜底。</dd>
             <dt>DLT</dt><dd>消费失败最终进入的死信主题，可在这里查看并单条/批量重放。</dd>
             <dt>对账</dt><dd>对比 Redis spent 与 billing_event 当日账单：Redis 少记自动修复，多记只告警。</dd>
@@ -76,7 +78,7 @@ const visible = defineModel<boolean>({ required: true })
           <h3>常见问题</h3>
           <dl class="help-glossary">
             <dt>为什么提示“广告不存在”？</dt>
-            <dd>adId 必须存在于 ad 表；兜底广告 999999 不在表中，已删除广告也查不到。可以从“广告管理”复制有效 adId。</dd>
+            <dd>adId 必须存在于 ad 表；兜底广告 {{ FALLBACK_AD_ID }} 不在表中，已删除广告也查不到。可以从“广告管理”复制有效 adId。</dd>
             <dt>为什么编辑广告提示 403？</dt>
             <dd>写操作被关闭，或前端来源不在 allowed-origins。检查 bidpulse.console.allow-write 与 allowed-origins。</dd>
             <dt>为什么返回兜底？</dt>

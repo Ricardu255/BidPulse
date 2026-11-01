@@ -12,6 +12,7 @@ import type { BudgetView, FrequencyView } from '@/api/types'
 import { cents, errorText, money, percent, ttlLabel } from '@/format'
 import { session } from '@/session'
 import { usePolling } from '@/composables/usePolling'
+import { FALLBACK_AD_ID } from '@/constants'
 
 const router = useRouter()
 const budget = ref<BudgetView | null>(null)
@@ -149,7 +150,7 @@ onMounted(refresh)
     <el-alert v-if="notFound" type="warning" :closable="false" show-icon class="panel">
       <template #title>没有找到这个广告</template>
       <div class="not-found">
-        <p>adId 必须存在于 ad 表；兜底广告 999999 不在表中，已删除的广告也查不到。</p>
+        <p>adId 必须存在于 ad 表；兜底广告 {{ FALLBACK_AD_ID }} 不在表中，已删除的广告也查不到。</p>
         <el-button size="small" type="primary" @click="useDefaultAd">使用广告 110</el-button>
         <el-button size="small" @click="openAds">打开广告列表</el-button>
       </div>

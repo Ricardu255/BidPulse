@@ -11,6 +11,7 @@ import { getOverview, getRecentBids } from '@/api/console'
 import type { OverviewView, RecentBidView } from '@/api/types'
 import { errorText, money } from '@/format'
 import { usePolling } from '@/composables/usePolling'
+import { FALLBACK_AD_ID } from '@/constants'
 
 const router = useRouter()
 const overview = ref<OverviewView | null>(null)
@@ -24,12 +25,12 @@ const fallbackPercent = computed(() => `${((overview.value?.fallbackRate ?? 0) *
 
 function resultLabel(row: RecentBidView): string {
   if (!row.hasAd) return '空广告'
-  return row.adId === 999999 ? '兜底' : '胜出'
+  return row.adId === FALLBACK_AD_ID ? '兜底' : '胜出'
 }
 
 function resultType(row: RecentBidView): 'success' | 'warning' | 'info' {
   if (!row.hasAd) return 'info'
-  return row.adId === 999999 ? 'warning' : 'success'
+  return row.adId === FALLBACK_AD_ID ? 'warning' : 'success'
 }
 
 function shortId(value: string): string {
@@ -166,7 +167,7 @@ onMounted(refresh)
       </el-table>
       <p class="hint">
         明细由本地队列异步落库，可能有约 200ms 延迟。结果中的“兜底”表示这次请求没有可投放广告
-        （无候选 / 预算耗尽 / 依赖故障 / 超时），系统返回固定 adId=999999 的保底广告；
+        （无候选 / 预算耗尽 / 依赖故障 / 超时），系统返回固定 adId={{ FALLBACK_AD_ID }} 的保底广告；
         它的出价是配置值，payPrice 为“—”表示不计费。
       </p>
     </el-card>

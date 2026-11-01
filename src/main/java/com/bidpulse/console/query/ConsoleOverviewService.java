@@ -1,5 +1,6 @@
 package com.bidpulse.console.query;
 
+import com.bidpulse.bid.FallbackAdProvider;
 import com.bidpulse.console.dto.OverviewView;
 import com.bidpulse.infra.kafka.KafkaLagQueryService;
 import com.bidpulse.console.dto.RecentBidView;
@@ -41,9 +42,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ConsoleOverviewService {
 
-    /** 与 fallback 广告的固定 id 对齐；用 ad_id 识别兜底，避免给 bid_log 加列。 */
-    private static final long FALLBACK_AD_ID = 999999L;
-
     private final JdbcTemplate jdbc;
     private final KafkaLagQueryService kafkaLagQueryService;
     private final HealthEndpoint healthEndpoint;
@@ -68,7 +66,7 @@ public class ConsoleOverviewService {
                         + "FROM bid_log WHERE bid_at >= ? "
                         + "GROUP BY DATE_FORMAT(bid_at, '%H:%i') ORDER BY MIN(bid_at)",
                 (rs, i) -> new TrendPoint(rs.getString("minute"), rs.getLong("bids"), rs.getLong("fallback")),
-                FALLBACK_AD_ID, LocalDateTime.now(zone).minusMinutes(30));
+                FallbackAdProvider.STATIC_AD_ID, LocalDateTime.now(zone).minusMinutes(30));
 
         double fallbackRate = bids[0] == 0 ? 0.0 : (double) bids[1] / bids[0];
         long kafkaLag;
@@ -118,7 +116,7 @@ public class ConsoleOverviewService {
                         + "COALESCE(SUM(CASE WHEN ad_id = ? THEN 1 ELSE 0 END), 0) AS fallback "
                         + "FROM bid_log WHERE bid_at >= ?",
                 (rs, i) -> new long[]{rs.getLong("total"), rs.getLong("fallback")},
-                FALLBACK_AD_ID, dayStart);
+                FallbackAdProvider.STATIC_AD_ID, dayStart);
     }
 
     private long[] adCounts() {

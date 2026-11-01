@@ -247,7 +247,7 @@ bidpulse:
     # 前端是独立的 console-ui/ 工程，这里只提供 REST 接口。
     # 登录/角色由 bidpulse.auth 控制；对外部署仍建议接企业 SSO/MFA 与网络 ACL。
     enabled: true
-    # 额外全局写开关：关闭后写接口返回 403（角色校验仍然生效）
+    # 控制台写操作开关：关闭后 /console-api/v1 写接口返回 403（角色校验仍然生效）
     allow-write: true
     # 前后端分开部署时允许的前端来源（逗号分隔）；开发态为 Vite 默认端口
     allowed-origins: "http://localhost:5173,http://127.0.0.1:5173"

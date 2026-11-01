@@ -5,6 +5,7 @@ import type {
   RecentBidView,
 } from '../types'
 import { MOCK_ADS, delay, state } from './shared'
+import { FALLBACK_AD_ID } from '@/constants'
 
 export async function mockOverview(): Promise<OverviewView> {
   await delay(160)
@@ -38,7 +39,7 @@ export async function mockRecentBids(limit = 20): Promise<RecentBidView[]> {
     const winner = fallback ? null : index % 3 === 0 ? 106 : 110
     return {
       requestId: `mock-${(1730000000000 + index).toString(36)}`,
-      adId: fallback ? 999999 : winner,
+      adId: fallback ? FALLBACK_AD_ID : winner,
       winBid: fallback ? null : winner === 110 ? 1.5 : 1.0,
       payPrice: fallback ? null : winner === 110 ? 1.01 : 0.81,
       hasAd: true,
@@ -57,7 +58,7 @@ export async function mockData(table: string, params: DataQueryParams): Promise<
       columns: ['request_id', 'ad_id', 'win_bid', 'pay_price', 'has_ad', 'cost_ms', 'bid_at'],
       rows: Array.from({ length: Math.min(limit, 10) }, (_, index) => ({
         request_id: `mock-${(1730000000000 + index).toString(36)}`,
-        ad_id: index === 6 ? 999999 : index % 3 === 0 ? 106 : 110,
+        ad_id: index === 6 ? FALLBACK_AD_ID : index % 3 === 0 ? 106 : 110,
         win_bid: index === 6 ? null : index % 3 === 0 ? 1.0 : 1.5,
         pay_price: index === 6 ? null : index % 3 === 0 ? 0.81 : 1.01,
         has_ad: 1,

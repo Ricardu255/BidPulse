@@ -28,9 +28,12 @@ public class FallbackAdProvider {
     /** Redis 里的兜底广告 key */
     static final String REDIS_KEY = "fallback:ad";
 
+    /** 静态兜底广告 ID；控制台统计与前端兜底判定共用这个约定 */
+    public static final long STATIC_AD_ID = 999999L;
+
     /** 静态兜底广告的 JSON 形态，用于启动时播种 */
     private static final String AD_JSON =
-            "{\"adId\":999999,\"advertiserId\":0,\"title\":\"兜底保底广告\",\"categoryCode\":\"mobile\",\"bid\":0.01}";
+            "{\"adId\":" + STATIC_AD_ID + ",\"advertiserId\":0,\"title\":\"兜底保底广告\",\"categoryCode\":\"mobile\",\"bid\":0.01}";
 
     /** Redis 不可用时的最后保底 */
     private static final Ad STATIC_AD = buildStaticAd();
@@ -122,7 +125,7 @@ public class FallbackAdProvider {
 
     private static Ad buildStaticAd() {
         Ad ad = new Ad();
-        ad.setId(999999L);
+        ad.setId(STATIC_AD_ID);
         ad.setAdvertiserId(0);
         ad.setTitle("兜底保底广告");
         ad.setCategoryCode("mobile");

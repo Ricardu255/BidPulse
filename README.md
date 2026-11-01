@@ -220,7 +220,7 @@ npm run build:embedded
 # 打开 http://localhost:8080/console/index.html
 ```
 
-控制台默认开启；登录/角色是主安全闸，`allow-write` 是额外的全局写开关：
+控制台默认开启；登录/角色是主安全闸，`allow-write` 是控制台写操作的额外开关：
 
 ```yaml
 bidpulse:

@@ -117,5 +117,5 @@ E2E_BASE_URL=http://127.0.0.1:5173 E2E_USERNAME=admin E2E_PASSWORD='<密码>' np
 
 - 当前支持登录/角色、只读展示、广告新建/编辑、暂停/恢复、调日预算、DLT 重放、手动对账、消费组暂停/恢复、运行时开关与审计日志。
 - 打开预算页不会播种预算或创建频次 key。
-- `bidpulse.console.allow-write=false` 时写操作返回 403；它是登录/角色之外的额外全局写开关。
+- `bidpulse.console.allow-write=false` 时控制台写操作返回 403；它是登录/角色之外的额外开关，不影响 `/admin/**` 的管理员鉴权。
 - 真实账号密码只从 `BIDPULSE_*_PASSWORD` 环境变量注入；未配置时后端日志生成一次性随机密码。

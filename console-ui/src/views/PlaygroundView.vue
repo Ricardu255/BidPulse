@@ -8,6 +8,7 @@ import type { BidRequest, BidResult, BurstRow } from '@/api/types'
 import { errorText, money } from '@/format'
 import { remember } from '@/session'
 import { hasRole } from '@/auth'
+import { FALLBACK_AD_ID } from '@/constants'
 
 const route = useRoute()
 
@@ -222,7 +223,7 @@ onMounted(() => {
         :closable="false"
         show-icon
         title="没有可投放的真实广告，已返回兜底广告"
-        description="兜底广告 adId=999999 是保底广告，不是广告主投放；出价只是配置值，payPrice 为空，不计费（priceMode=2）。"
+        :description="`兜底广告 adId=${FALLBACK_AD_ID} 是保底广告，不是广告主投放；出价只是配置值，payPrice 为空，不计费（priceMode=2）。`"
       />
 
       <el-table :data="last?.topCandidates ?? []" stripe size="small">

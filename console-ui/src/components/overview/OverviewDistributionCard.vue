@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { RecentBidView } from '@/api/types'
+import { FALLBACK_AD_ID } from '@/constants'
 
 const props = defineProps<{ recent: RecentBidView[] }>()
 
@@ -10,7 +11,7 @@ const distribution = computed(() => {
   let empty = 0
   for (const row of props.recent) {
     if (!row.hasAd) empty += 1
-    else if (row.adId === 999999) fallback += 1
+    else if (row.adId === FALLBACK_AD_ID) fallback += 1
     else win += 1
   }
   const total = win + fallback + empty

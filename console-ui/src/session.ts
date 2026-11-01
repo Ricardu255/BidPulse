@@ -1,8 +1,8 @@
 import { reactive } from 'vue'
+import { FALLBACK_AD_ID } from '@/constants'
 
 const AD_KEY = 'bidpulse.console.adId'
 const USER_KEY = 'bidpulse.console.userId'
-const FALLBACK_AD_ID = 999999
 
 function readAdId(): number {
   const raw = localStorage.getItem(AD_KEY)
