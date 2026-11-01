@@ -31,7 +31,6 @@ function healthText(value: string): string {
   if (value === 'CLOSED') return '正常'
   if (value === 'OPEN') return '熔断中'
   if (value === 'HALF_OPEN') return '半开恢复'
-  if (value === 'SENTINEL') return '框架托管'
   return value
 }
 

@@ -4,6 +4,9 @@ import com.alibaba.csp.sentinel.Entry;
 import com.alibaba.csp.sentinel.SphU;
 import com.alibaba.csp.sentinel.Tracer;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.alibaba.csp.sentinel.slots.block.degrade.circuitbreaker.EventObserverRegistry;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Sentinel 熔断门（默认实现）。
@@ -29,9 +32,14 @@ import com.alibaba.csp.sentinel.slots.block.BlockException;
 public class SentinelBreakerGate implements BreakerGate {
 
     private final String resource;
+    private final AtomicReference<String> state = new AtomicReference<>("CLOSED");
 
     public SentinelBreakerGate(String resource) {
         this.resource = resource;
+        // Sentinel 不暴露 CircuitBreaker 的公开读取接口，但提供了状态变更观察者：
+        // 注册后把 CLOSED/OPEN/HALF_OPEN 同步到本地，控制台即可展示真实状态。
+        EventObserverRegistry.getInstance().addStateChangeObserver(
+                resource, (previous, next, rule, value) -> state.set(next.name()));
     }
 
     @Override
@@ -67,6 +75,6 @@ public class SentinelBreakerGate implements BreakerGate {
 
     @Override
     public String state() {
-        return "SENTINEL";
+        return state.get();
     }
 }

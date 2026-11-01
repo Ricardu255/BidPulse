@@ -49,8 +49,8 @@ public interface BreakerGate {
     String impl();
 
     /**
-     * 当前可读状态（CLOSED / OPEN / HALF_OPEN / SENTINEL / UNKNOWN）。
-     * Sentinel 的状态由其内部统计托管，这里只返回实现标识，避免误读。
+     * 当前可读状态（CLOSED / OPEN / HALF_OPEN / UNKNOWN）。
+     * Sentinel 实现通过状态变更观察者同步真实状态；未注册到规则时返回 CLOSED。
      */
     default String state() {
         return "UNKNOWN";

@@ -80,6 +80,8 @@ class SentinelBreakerGateTest {
             }
         }
 
+        assertEquals("OPEN", gate.state(), "状态观察者应把 Sentinel 的真实状态同步到控制台");
+
         // 熔断已打开：必须短路，且 action 一次都不能被执行
         AtomicInteger executed = new AtomicInteger(0);
         assertThrows(BreakerOpenException.class, () -> gate.call(() -> {
