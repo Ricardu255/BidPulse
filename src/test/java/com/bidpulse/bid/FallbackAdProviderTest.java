@@ -8,6 +8,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -58,6 +60,17 @@ class FallbackAdProviderTest {
         assertEquals(Long.valueOf(999999L), provider.current().getId(), "应回退到静态兜底广告");
         assertEquals(Long.valueOf(999999L), provider.current().getId());
         verify(ops, times(1)).get(FallbackAdProvider.REDIS_KEY);
+    }
+
+    @Test
+    @DisplayName("兜底开关在运行时读取，修改 props 后立即生效")
+    void enabled_readsCurrentProperty() {
+        BidPulseProperties props = propsWith(60_000, 60_000);
+        FallbackAdProvider provider = new FallbackAdProvider(redis, new ObjectMapper(), props);
+
+        assertTrue(provider.enabled());
+        props.getFallback().setEnabled(false);
+        assertFalse(provider.enabled());
     }
 
     private static BidPulseProperties propsWith(long cacheTtlMs, long retryBackoffMs) {
