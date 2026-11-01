@@ -10,6 +10,7 @@ import { changeAdStatus, getAdDetail, getAds, updateAdBudget } from '@/api/conso
 import type { AdDetail, AdView } from '@/api/types'
 import { errorText, money } from '@/format'
 import { useAsyncAction } from '@/composables/useAsyncAction'
+import { hasRole } from '@/auth'
 
 const filters = reactive<{
   status?: number
@@ -20,6 +21,8 @@ const filters = reactive<{
   advertiserId: undefined,
   titleLike: '',
 })
+
+const canWrite = hasRole('OPERATOR', 'ADMIN')
 
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const ads = ref<AdView[]>([])
@@ -170,7 +173,7 @@ onMounted(() => load(1))
     >
       <template #actions>
         <div class="actions">
-          <el-button type="primary" @click="openCreate">新建广告</el-button>
+          <el-button v-if="canWrite" type="primary" @click="openCreate">新建广告</el-button>
           <el-tag type="info" effect="plain">GET /console-api/v1/ads</el-tag>
         </div>
       </template>
@@ -219,11 +222,11 @@ onMounted(() => load(1))
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="warning" @click="toggleStatus(row)">
+            <el-button v-if="canWrite" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="canWrite" link type="warning" @click="toggleStatus(row)">
               {{ row.status === 1 ? '暂停' : '恢复' }}
             </el-button>
-            <el-button link type="primary" @click="editBudget(row)">预算</el-button>
+            <el-button v-if="canWrite" link type="primary" @click="editBudget(row)">预算</el-button>
           </template>
         </el-table-column>
       </el-table>

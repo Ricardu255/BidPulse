@@ -5,7 +5,9 @@ import FilterBar from '@/components/FilterBar.vue'
 import { getDltMessages, replayDlt, replayDltOne } from '@/api/console'
 import type { DltMessageView, DltReplayStats } from '@/api/types'
 import { errorText } from '@/format'
+import { hasRole } from '@/auth'
 
+const canWrite = hasRole('OPERATOR', 'ADMIN')
 const dltMessages = ref<DltMessageView[]>([])
 const dltLoading = ref(false)
 const dltLimit = ref(20)
@@ -94,7 +96,7 @@ onMounted(refreshDlt)
       <el-button size="small" :loading="dltLoading" @click="refreshDlt">刷新</el-button>
       <span class="filter-label">批量重放上限</span>
       <el-input-number v-model="replayMax" :min="1" :max="1000" :precision="0" size="small" />
-      <el-button size="small" type="warning" plain :loading="replaying" @click="triggerReplay">
+      <el-button size="small" type="warning" plain :disabled="!canWrite" :loading="replaying" @click="triggerReplay">
         批量重放
       </el-button>
     </FilterBar>
@@ -141,6 +143,7 @@ onMounted(refreshDlt)
           <el-button
             link
             type="warning"
+            :disabled="!canWrite"
             :loading="replayingOne === `${row.partition}:${row.offset}`"
             @click="replayOne(row)"
           >

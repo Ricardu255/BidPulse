@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getExperiments, updateExperiments } from '@/api/console'
 import type { ExperimentsView } from '@/api/types'
 import { errorText } from '@/format'
+import { hasRole } from '@/auth'
 
 const experiments = ref<ExperimentsView | null>(null)
 const saved = ref<ExperimentsView | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
+const canWrite = computed(() => hasRole('OPERATOR', 'ADMIN'))
 
 async function load(): Promise<void> {
   loading.value = true
@@ -71,7 +73,7 @@ onMounted(load)
       <template #header>
         <div class="card-head">
           <span>运行时配置</span>
-          <el-button type="primary" :loading="saving" :disabled="!experiments.consoleAllowWrite" @click="save">保存</el-button>
+          <el-button type="primary" :loading="saving" :disabled="!canWrite || !experiments.consoleAllowWrite" @click="save">保存</el-button>
         </div>
       </template>
 
@@ -98,7 +100,7 @@ onMounted(load)
             <strong>兜底开关</strong>
             <p class="hint">关闭后不会返回兜底广告，用于复现旧实现。</p>
           </div>
-          <el-switch v-model="experiments.fallbackEnabled" :disabled="!experiments.consoleAllowWrite" />
+          <el-switch v-model="experiments.fallbackEnabled" :disabled="!canWrite || !experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -106,7 +108,7 @@ onMounted(load)
             <strong>强制兜底</strong>
             <p class="hint">开启后每次都走兜底，用于模拟依赖全面故障。</p>
           </div>
-          <el-switch v-model="experiments.fallbackForce" :disabled="!experiments.consoleAllowWrite" />
+          <el-switch v-model="experiments.fallbackForce" :disabled="!canWrite || !experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -114,7 +116,7 @@ onMounted(load)
             <strong>实时频次控制</strong>
             <p class="hint">关闭后不读写频次 key，匿名与登录请求都不控频。</p>
           </div>
-          <el-switch v-model="experiments.frequencyEnabled" :disabled="!experiments.consoleAllowWrite" />
+          <el-switch v-model="experiments.frequencyEnabled" :disabled="!canWrite || !experiments.consoleAllowWrite" />
         </div>
 
         <div class="experiment-item">
@@ -124,7 +126,7 @@ onMounted(load)
           </div>
           <el-input-number
             v-model="experiments.frequencyMaxPerHour"
-            :disabled="!experiments.consoleAllowWrite"
+            :disabled="!canWrite || !experiments.consoleAllowWrite"
             :min="1"
             :max="100"
             controls-position="right"

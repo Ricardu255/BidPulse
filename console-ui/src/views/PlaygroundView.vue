@@ -7,6 +7,7 @@ import { runBid, runBurst } from '@/api/console'
 import type { BidRequest, BidResult, BurstRow } from '@/api/types'
 import { errorText, money } from '@/format'
 import { remember } from '@/session'
+import { hasRole } from '@/auth'
 
 const route = useRoute()
 
@@ -19,6 +20,7 @@ const form = reactive<BidRequest>({
   userId: 'learner-1',
 })
 
+const canBid = hasRole('OPERATOR', 'ADMIN')
 const loading = ref(false)
 const bursting = ref(false)
 const showAdvanced = ref(false)
@@ -151,9 +153,17 @@ onMounted(() => {
           </el-form-item>
         </div>
 
+        <el-alert
+          v-if="!canBid"
+          type="info"
+          :closable="false"
+          show-icon
+          title="只读账号不能发起竞价；请使用 operator 或 admin 账号。"
+          class="formula"
+        />
         <div class="actions">
-          <el-button type="primary" :loading="loading" @click="submitBid">发起竞价</el-button>
-          <el-button :loading="bursting" @click="submitBurst">连打 4 次</el-button>
+          <el-button type="primary" :disabled="!canBid" :loading="loading" @click="submitBid">发起竞价</el-button>
+          <el-button :disabled="!canBid" :loading="bursting" @click="submitBurst">连打 4 次</el-button>
           <el-button link type="primary" @click="showAdvanced = !showAdvanced">
             {{ showAdvanced ? '收起高级参数' : '高级参数' }}
           </el-button>

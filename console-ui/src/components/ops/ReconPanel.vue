@@ -6,7 +6,9 @@ import MetricCard from '@/components/MetricCard.vue'
 import { getReconReport, runRecon } from '@/api/console'
 import type { ReconReport } from '@/api/types'
 import { cents, errorText } from '@/format'
+import { hasRole } from '@/auth'
 
+const canWrite = hasRole('OPERATOR', 'ADMIN')
 const recon = ref<ReconReport | null>(null)
 const reconLoading = ref(false)
 const reconRunning = ref(false)
@@ -89,7 +91,7 @@ onMounted(refreshRecon)
   <el-card class="panel" shadow="never">
     <FilterBar>
       <el-button size="small" :loading="reconLoading" @click="refreshRecon">刷新</el-button>
-      <el-button size="small" type="primary" :loading="reconRunning" @click="triggerRecon">
+      <el-button size="small" type="primary" :disabled="!canWrite" :loading="reconRunning" @click="triggerRecon">
         立即对账
       </el-button>
       <span class="hint">Redis 低于账单自动修复；高于账单只告警。</span>

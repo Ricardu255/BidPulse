@@ -6,8 +6,10 @@ import { getKafkaGroups, pauseConsumers, resumeConsumers } from '@/api/console'
 import type { KafkaGroupView, KafkaPartitionView } from '@/api/types'
 import { errorText } from '@/format'
 import { usePolling } from '@/composables/usePolling'
+import { hasRole } from '@/auth'
 
 const props = defineProps<{ active: boolean }>()
+const canWrite = hasRole('OPERATOR', 'ADMIN')
 
 const groups = ref<KafkaGroupView[]>([])
 const loading = ref(false)
@@ -67,8 +69,8 @@ onMounted(refreshGroups)
   <el-card class="panel" shadow="never">
     <FilterBar>
       <el-button :loading="loading" @click="refreshGroups">刷新</el-button>
-      <el-button type="warning" plain @click="pause">暂停消费</el-button>
-      <el-button type="success" plain @click="resume">恢复消费</el-button>
+      <el-button type="warning" plain :disabled="!canWrite" @click="pause">暂停消费</el-button>
+      <el-button type="success" plain :disabled="!canWrite" @click="resume">恢复消费</el-button>
       <el-switch v-model="auto" active-text="自动刷新（2s）" />
       <span class="hint">lag = end - committed，负值按 0 处理。</span>
     </FilterBar>
