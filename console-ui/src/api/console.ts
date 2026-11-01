@@ -22,7 +22,7 @@ import {
   mockUpdateAd,
   mockUpdateAdBudget,
   mockUpdateExperiments,
-} from './mock'
+} from './mocks'
 import type {
   AdDetail,
   AdQueryParams,

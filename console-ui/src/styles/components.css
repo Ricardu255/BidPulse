@@ -1,0 +1,404 @@
+/* Shared components: cards, result blocks, Kafka cards, progress, Element Plus overrides, help. */
+/* ---------- 卡片 ---------- */
+.panel {
+  margin-bottom: 18px;
+  border: 1px solid var(--bp-line) !important;
+  border-radius: 16px !important;
+  background: var(--bp-panel) !important;
+  box-shadow: var(--bp-shadow) !important;
+}
+
+.panel .el-card__header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--bp-line);
+  background: linear-gradient(180deg, #fdfefe, #f8fbfd);
+  border-radius: 16px 16px 0 0;
+  font-weight: 600;
+  color: var(--bp-ink);
+}
+
+.panel .el-card__body {
+  padding: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 4px 18px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.hint {
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- 结果区 ---------- */
+.result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.eyebrow {
+  color: #8aa2b5;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.result-head h2 {
+  margin: 4px 0;
+  font-size: 22px;
+  color: var(--bp-ink);
+}
+
+.result-head p {
+  margin: 0;
+  color: var(--bp-muted);
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 12px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metric-grid.six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.metric-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.metric {
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid #dce7ef;
+  border-radius: 13px;
+  background: linear-gradient(180deg, var(--bp-cream) 0%, #f3f8fb 100%);
+}
+
+.metric span {
+  display: block;
+  color: var(--bp-muted);
+  font-size: 12px;
+}
+
+.metric strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--bp-ink);
+}
+
+.metric small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #8aa0b3;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric .el-tag {
+  margin-top: 2px;
+}
+
+.formula {
+  margin-bottom: 14px;
+}
+
+.filter-label {
+  color: var(--bp-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.filters .el-input-number {
+  width: 150px;
+}
+
+.filters .el-input {
+  width: 220px;
+}
+
+/* ---------- Kafka 卡片 ---------- */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.group-card {
+  border: 1px solid var(--bp-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--bp-panel) 0%, #f6fafd 100%);
+  padding: 16px;
+  box-shadow: 0 8px 22px rgba(72, 101, 128, 0.05);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--bp-ink-soft);
+}
+
+.lag {
+  margin: 14px 0 4px;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--bp-green);
+}
+
+.lag.hot {
+  color: var(--bp-red);
+}
+
+.group-card small {
+  color: var(--bp-muted);
+}
+
+/* ---------- 进度 ---------- */
+.progress-block {
+  margin: 16px 0 4px;
+}
+
+.progress-caption {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  color: var(--bp-muted);
+  font-size: 12px;
+}
+
+.mono {
+  font-family: Consolas, "SFMono-Regular", monospace;
+}
+
+
+/* ---------- Element Plus 细节 ---------- */
+.el-tag {
+  /* 顶部结果标签用 el-zoom-in 过渡，截图/首屏会短暂不可见；直接取消更利落 */
+  animation: none !important;
+  transition: none !important;
+}
+
+.el-button {
+  border-radius: 9px;
+}
+
+.el-button--primary {
+  --el-button-bg-color: var(--bp-primary);
+  --el-button-border-color: var(--bp-primary);
+  --el-button-hover-bg-color: #6f95b5;
+  --el-button-hover-border-color: #6f95b5;
+  --el-button-active-bg-color: var(--bp-primary-deep);
+  --el-button-active-border-color: var(--bp-primary-deep);
+}
+
+.el-table {
+  --el-table-header-bg-color: #eef5fa;
+  --el-table-header-text-color: #4d6a82;
+  --el-table-row-hover-bg-color: #f4f9fc;
+  --el-table-border-color: #e2ebf2;
+  --el-table-tr-bg-color: transparent;
+  --el-table-bg-color: transparent;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+}
+
+.el-progress-bar__outer {
+  background-color: #e4edf4 !important;
+}
+
+.el-tag--success {
+  --el-tag-bg-color: #e8f3ed;
+  --el-tag-border-color: #cfe5d9;
+  --el-tag-text-color: #3f7d63;
+  color: #2f6b52 !important;
+}
+
+.el-tag--warning {
+  --el-tag-bg-color: #fbf2e3;
+  --el-tag-border-color: #efddc0;
+  --el-tag-text-color: #9a6d2c;
+  color: #855a1d !important;
+}
+
+.el-tag--danger {
+  --el-tag-bg-color: #faebeb;
+  --el-tag-border-color: #efcece;
+  --el-tag-text-color: #9f4c4c;
+  color: #8f3f3f !important;
+}
+
+.el-alert--success.is-light {
+  background-color: #eef7f1;
+  color: #3f7d63;
+}
+
+.el-alert--warning.is-light {
+  background-color: #fdf6e9;
+  color: #8f6528;
+}
+
+.el-input__wrapper,
+.el-select__wrapper {
+  background-color: #fffdfa;
+}
+
+@media (max-width: 1100px) {
+  .form-grid,
+  .group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-grid,
+  .metric-grid.six,
+  .metric-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .form-grid,
+  .group-grid,
+  .metric-grid,
+  .metric-grid.six,
+  .metric-grid.three {
+    grid-template-columns: 1fr;
+  }
+
+  .main {
+    padding: 14px;
+  }
+
+  .page-header {
+    flex-direction: column;
+  }
+}
+
+
+/* ---------- 权限/异常提示 ---------- */
+.not-found p {
+  margin: 6px 0 10px;
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.not-found .el-button + .el-button {
+  margin-left: 8px;
+}
+
+/* ---------- 使用说明 ---------- */
+.help-body {
+  color: var(--bp-ink-soft);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.help-lead {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--bp-cream), #f4f9fc);
+  color: var(--bp-ink-soft);
+}
+
+.help-section {
+  margin-bottom: 18px;
+}
+
+.help-section h3 {
+  margin: 0 0 6px;
+  color: var(--bp-ink);
+  font-size: 15px;
+}
+
+.help-section p {
+  margin: 0;
+  color: var(--bp-muted);
+}
+
+.help-steps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--bp-ink-soft);
+}
+
+
+/* ---------- 首页快捷入口 ---------- */
+.quick-start-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.quick-start-inner strong {
+  color: var(--bp-ink);
+  font-size: 15px;
+}
+
+.quick-start-inner p {
+  margin: 6px 0 0;
+  color: var(--bp-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .quick-start-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+
+.help-glossary {
+  margin: 0;
+}
+
+.help-glossary dt {
+  margin-top: 10px;
+  color: var(--bp-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.help-glossary dd {
+  margin: 3px 0 0;
+  color: var(--bp-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}

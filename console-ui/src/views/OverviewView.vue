@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import OverviewHealthCard from '@/components/overview/OverviewHealthCard.vue'
+import OverviewDistributionCard from '@/components/overview/OverviewDistributionCard.vue'
+import OverviewTrendChart from '@/components/overview/OverviewTrendChart.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -17,73 +20,7 @@ const loading = ref(false)
 const auto = ref(true)
 const recentDrawer = ref(false)
 
-const maxBids = computed(() => {
-  const points = overview.value?.trend ?? []
-  return Math.max(1, ...points.map((point) => point.bids))
-})
-
 const fallbackPercent = computed(() => `${((overview.value?.fallbackRate ?? 0) * 100).toFixed(2)}%`)
-
-const healthItems = computed(() =>
-  Object.entries(overview.value?.health ?? {}).map(([key, value]) => ({
-    key,
-    value,
-    label: healthLabel(key),
-  })),
-)
-
-const distribution = computed(() => {
-  let win = 0
-  let fallback = 0
-  let empty = 0
-  for (const row of recent.value) {
-    if (!row.hasAd) empty += 1
-    else if (row.adId === 999999) fallback += 1
-    else win += 1
-  }
-  const total = win + fallback + empty
-  const winEnd = total ? (win / total) * 100 : 0
-  const fallbackEnd = total ? winEnd + (fallback / total) * 100 : 0
-  const gradient = total
-    ? `conic-gradient(#5b83a6 0 ${winEnd}%, #b9853c ${winEnd}% ${fallbackEnd}%, #c9d9e6 ${fallbackEnd}% 100%)`
-    : 'conic-gradient(#e4edf4 0 100%)'
-  return { win, fallback, empty, total, gradient }
-})
-
-function barHeight(bids: number): number {
-  return Math.max(4, Math.round((bids / maxBids.value) * 110))
-}
-
-function healthLabel(key: string): string {
-  const labels: Record<string, string> = {
-    overall: '整体',
-    db: 'MySQL',
-    redis: 'Redis',
-    kafka: 'Kafka',
-    diskSpace: '磁盘',
-    ping: 'Ping',
-    dbBreaker: 'DB 熔断',
-    redisBreaker: 'Redis 熔断',
-  }
-  return labels[key] ?? key
-}
-
-function healthText(value: string): string {
-  if (value === 'UP') return '正常'
-  if (value === 'DOWN' || value === 'OUT_OF_SERVICE') return '异常'
-  if (value === 'CLOSED') return '正常'
-  if (value === 'OPEN') return '熔断中'
-  if (value === 'HALF_OPEN') return '半开恢复'
-  if (value === 'SENTINEL') return '框架托管'
-  return value
-}
-
-function healthType(value: string): 'success' | 'warning' | 'danger' | 'info' {
-  if (value === 'UP' || value === 'CLOSED') return 'success'
-  if (value === 'HALF_OPEN') return 'warning'
-  if (value === 'DOWN' || value === 'OUT_OF_SERVICE' || value === 'OPEN') return 'danger'
-  return 'info'
-}
 
 function resultLabel(row: RecentBidView): string {
   if (!row.hasAd) return '空广告'
@@ -183,56 +120,17 @@ onMounted(refresh)
       </div>
     </el-card>
 
-    <el-row :gutter="16">
+    <el-row v-if="overview" :gutter="16">
       <el-col :xs="24" :md="7">
-        <el-card class="panel" shadow="never">
-          <template #header>系统健康</template>
-          <div class="health-strip">
-            <div v-for="item in healthItems" :key="item.key" class="health-chip">
-              <span class="health-name">{{ item.label }}</span>
-              <el-tag :type="healthType(item.value)" size="small">{{ healthText(item.value) }}</el-tag>
-            </div>
-            <el-empty v-if="!healthItems.length" description="暂无健康数据" :image-size="60" />
-          </div>
-        </el-card>
+        <OverviewHealthCard :health="overview.health" />
       </el-col>
 
       <el-col :xs="24" :md="7">
-        <el-card class="panel" shadow="never">
-          <template #header>最近结果分布</template>
-          <div class="donut-wrap">
-            <div class="donut" :style="{ background: distribution.gradient }">
-              <div class="donut-center">
-                <strong>{{ distribution.total }}</strong>
-                <small>最近竞价</small>
-              </div>
-            </div>
-            <div class="legend">
-              <div><span class="legend-dot win"></span>胜出 {{ distribution.win }}</div>
-              <div><span class="legend-dot fallback"></span>兜底 {{ distribution.fallback }}</div>
-              <div><span class="legend-dot empty"></span>空广告 {{ distribution.empty }}</div>
-            </div>
-          </div>
-        </el-card>
+        <OverviewDistributionCard :recent="recent" />
       </el-col>
 
       <el-col :xs="24" :md="10">
-        <el-card class="panel" shadow="never">
-          <template #header>近 30 分钟请求趋势</template>
-          <div v-if="overview?.trend?.length" class="trend">
-            <div v-for="(point, index) in overview?.trend ?? []" :key="point.minute" class="trend-col">
-              <div
-                class="trend-bar"
-                :style="{ height: `${barHeight(point.bids)}px` }"
-                :title="`${point.minute} · ${point.bids} 次 · 兜底 ${point.fallback}`"
-              ></div>
-              <span v-if="index % 5 === 0 || index === (overview?.trend?.length ?? 0) - 1" class="trend-label">
-                {{ point.minute }}
-              </span>
-            </div>
-          </div>
-          <el-empty v-else description="近 30 分钟暂无竞价数据" :image-size="60" />
-        </el-card>
+        <OverviewTrendChart :trend="overview.trend" />
       </el-col>
     </el-row>
 

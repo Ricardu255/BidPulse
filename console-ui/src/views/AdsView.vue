@@ -2,20 +2,14 @@
 import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AdStatusTag from '@/components/AdStatusTag.vue'
+import AdFormDialog from '@/components/ads/AdFormDialog.vue'
+import AdDetailDrawer from '@/components/ads/AdDetailDrawer.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  changeAdStatus,
-  createAd,
-  getAdDetail,
-  getAds,
-  updateAd,
-  updateAdBudget,
-} from '@/api/console'
-import type { AdDetail, AdUpsertRequest, AdView } from '@/api/types'
+import { changeAdStatus, getAdDetail, getAds, updateAdBudget } from '@/api/console'
+import type { AdDetail, AdView } from '@/api/types'
 import { errorText, money } from '@/format'
 import { useAsyncAction } from '@/composables/useAsyncAction'
-import { useDirtyForm } from '@/composables/useDirtyForm'
 
 const filters = reactive<{
   status?: number
@@ -37,56 +31,7 @@ const detail = ref<AdDetail | null>(null)
 const formVisible = ref(false)
 const editingId = ref<number | null>(null)
 const editingStatus = ref<number | null>(null)
-const saving = ref(false)
-const targetOptions = [
-  { value: 1, label: '地域' },
-  { value: 2, label: '年龄段' },
-  { value: 3, label: '性别' },
-  { value: 4, label: '兴趣' },
-  { value: 5, label: '系统' },
-  { value: 6, label: '设备' },
-]
-
-function emptyForm(): AdUpsertRequest {
-  return {
-    advertiserId: 1,
-    title: '',
-    creativeUrl: 'https://cdn.example.com/creative/new.jpg',
-    categoryCode: 'travel',
-    bid: 1.0,
-    dailyBudget: 1000,
-    status: 1,
-    targets: [
-      { dimType: 1, dimValue: '110000' },
-      { dimType: 2, dimValue: '25-30' },
-      { dimType: 3, dimValue: 'male' },
-    ],
-  }
-}
-
-const {
-  form: adForm,
-  dirty: formDirty,
-  load: loadForm,
-  markSaved: markFormSaved,
-} = useDirtyForm<AdUpsertRequest>(emptyForm())
-
-function dimLabel(dimType: number): string {
-  const labels: Record<number, string> = {
-    1: '地域',
-    2: '年龄段',
-    3: '性别',
-    4: '兴趣',
-    5: '系统',
-    6: '设备',
-  }
-  return labels[dimType] ?? `维度 ${dimType}`
-}
-
-function formatTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  return value.replace('T', ' ').slice(0, 19)
-}
+const editingDetail = ref<AdDetail | null>(null)
 
 async function load(pageNum = page.pageNum): Promise<void> {
   loading.value = true
@@ -121,6 +66,11 @@ function reset(): void {
   search()
 }
 
+function formatTime(value: string | null | undefined): string {
+  if (!value) return '—'
+  return value.replace('T', ' ').slice(0, 19)
+}
+
 function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
 }
@@ -141,88 +91,18 @@ async function openDetail(row: AdView): Promise<void> {
 function openCreate(): void {
   editingId.value = null
   editingStatus.value = null
-  loadForm(emptyForm())
+  editingDetail.value = null
   formVisible.value = true
 }
 
 async function openEdit(row: AdView): Promise<void> {
   try {
-    const data = await getAdDetail(row.id)
+    editingDetail.value = await getAdDetail(row.id)
     editingId.value = row.id
-    editingStatus.value = data.ad.status
-    loadForm({
-      advertiserId: data.ad.advertiserId,
-      title: data.ad.title,
-      creativeUrl: data.ad.creativeUrl,
-      categoryCode: data.ad.categoryCode,
-      bid: Number(data.ad.bid),
-      dailyBudget: Number(data.ad.dailyBudget),
-      status: data.ad.status === 3 ? 2 : data.ad.status,
-      targets: data.targets.map((target) => ({ ...target })),
-    })
+    editingStatus.value = editingDetail.value.ad.status
     formVisible.value = true
   } catch (e) {
-    ElMessage.error(errorText(e))
-  }
-}
-
-function addTarget(): void {
-  adForm.targets.push({ dimType: 1, dimValue: '' })
-}
-
-function removeTarget(index: number): void {
-  adForm.targets.splice(index, 1)
-}
-
-async function saveAd(): Promise<void> {
-  if (!adForm.title.trim() || !adForm.creativeUrl.trim() || !adForm.categoryCode.trim()) {
-    ElMessage.error('标题、素材地址、类目不能为空')
-    return
-  }
-  if (adForm.advertiserId == null || adForm.bid == null || adForm.dailyBudget == null) {
-    ElMessage.error('广告主、出价、日预算不能为空')
-    return
-  }
-  if (adForm.bid <= 0 || adForm.dailyBudget < 1) {
-    ElMessage.error('出价应大于 0，日预算应不小于 1.00 元')
-    return
-  }
-  if (!adForm.targets.length) {
-    ElMessage.error('至少需要 1 条定向条件')
-    return
-  }
-  if (adForm.targets.some((target) => !target.dimValue.trim())) {
-    ElMessage.error('定向取值不能为空')
-    return
-  }
-  saving.value = true
-  try {
-    const payload: AdUpsertRequest = {
-      ...adForm,
-      // 已耗尽广告编辑时不回写 status，避免“只改标题却把系统状态改成在投”
-      status: editingStatus.value === 3 ? undefined : adForm.status,
-      title: adForm.title.trim(),
-      creativeUrl: adForm.creativeUrl.trim(),
-      categoryCode: adForm.categoryCode.trim(),
-      targets: adForm.targets.map((target) => ({
-        dimType: target.dimType,
-        dimValue: target.dimValue.trim(),
-      })),
-    }
-    if (editingId.value == null) {
-      const result = await createAd(payload)
-      ElMessage.success(`已创建广告 #${result.id}`)
-    } else {
-      await updateAd(editingId.value, payload)
-      ElMessage.success(`已更新广告 #${editingId.value}`)
-    }
-    markFormSaved()
-    formVisible.value = false
-    await load()
-  } catch (e) {
-    ElMessage.error(errorText(e))
-  } finally {
-    saving.value = false
+    notifyError(e)
   }
 }
 
@@ -362,112 +242,14 @@ onMounted(() => load(1))
       </div>
     </el-card>
 
-    <el-dialog
+    <AdFormDialog
       v-model="formVisible"
-      :title="(editingId == null ? '新建广告' : `编辑广告 #${editingId}`) + (formDirty ? '（未保存）' : '')"
-      width="680px"
-      destroy-on-close
-    >
-      <el-alert
-        v-if="editingStatus === 3"
-        type="warning"
-        :closable="false"
-        show-icon
-        title="该广告已被系统标记为已耗尽；编辑不会自动恢复投放，请使用列表的“恢复”操作并确认预算已重置。"
-        class="formula"
-      />
-      <el-form :model="adForm" label-position="top">
-        <div class="form-grid">
-          <el-form-item label="广告主 ID">
-            <el-input-number
-              v-model="adForm.advertiserId"
-              :min="1"
-              :disabled="editingId != null"
-              controls-position="right"
-            />
-          </el-form-item>
-          <el-form-item label="类目">
-            <el-input v-model="adForm.categoryCode" />
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="adForm.status">
-              <el-option :value="1" label="在投" />
-              <el-option :value="2" label="暂停" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="标题">
-            <el-input v-model="adForm.title" placeholder="创意标题" />
-          </el-form-item>
-          <el-form-item label="单次出价（元）">
-            <el-input-number
-              v-model="adForm.bid"
-              :min="0.0001"
-              :precision="4"
-              :step="0.1"
-              controls-position="right"
-            />
-          </el-form-item>
-          <el-form-item label="日预算（元）">
-            <el-input-number
-              v-model="adForm.dailyBudget"
-              :min="1"
-              :precision="2"
-              :step="100"
-              controls-position="right"
-            />
-          </el-form-item>
-        </div>
-        <el-form-item label="素材地址">
-          <el-input v-model="adForm.creativeUrl" />
-        </el-form-item>
+      :editing-id="editingId"
+      :editing-status="editingStatus"
+      :detail="editingDetail"
+      @saved="load"
+    />
 
-        <h4 class="drawer-section">定向条件</h4>
-        <div v-for="(target, index) in adForm.targets" :key="index" class="target-row">
-          <el-select v-model="target.dimType" style="width: 140px">
-            <el-option
-              v-for="option in targetOptions"
-              :key="option.value"
-              :value="option.value"
-              :label="option.label"
-            />
-          </el-select>
-          <el-input v-model="target.dimValue" placeholder="取值，如 110000 / 25-30 / male" />
-          <el-button link type="danger" @click="removeTarget(index)">删除</el-button>
-        </div>
-        <el-button size="small" @click="addTarget">添加定向</el-button>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="formVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveAd">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-drawer v-model="drawer" title="广告详情" size="440px">
-      <div v-loading="detailLoading">
-        <template v-if="detail">
-          <div class="drawer-title">#{{ detail.ad.id }} · {{ detail.ad.title }}</div>
-          <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="广告主">{{ detail.ad.advertiserId }}</el-descriptions-item>
-            <el-descriptions-item label="类目">{{ detail.ad.categoryCode }}</el-descriptions-item>
-            <el-descriptions-item label="出价">{{ money(detail.ad.bid) }}</el-descriptions-item>
-            <el-descriptions-item label="日预算">{{ money(detail.ad.dailyBudget) }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-              <AdStatusTag :status="detail.ad.status" />
-            </el-descriptions-item>
-            <el-descriptions-item label="更新时间">{{ formatTime(detail.ad.updatedAt) }}</el-descriptions-item>
-          </el-descriptions>
-
-          <h4 class="drawer-section">定向条件</h4>
-          <el-table :data="detail.targets" size="small" stripe>
-            <el-table-column label="维度" width="110">
-              <template #default="{ row }">{{ dimLabel(row.dimType) }}</template>
-            </el-table-column>
-            <el-table-column prop="dimValue" label="取值" />
-          </el-table>
-          <p class="hint">定向条件参与 ad JOIN ad_target 检索；没有定向的广告永远不会被命中。</p>
-        </template>
-      </div>
-    </el-drawer>
+    <AdDetailDrawer v-model="drawer" :detail="detail" :loading="detailLoading" />
   </div>
 </template>

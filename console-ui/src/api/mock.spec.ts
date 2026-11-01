@@ -6,7 +6,7 @@ describe('mock api', () => {
   })
 
   it('caps frequency after three bids for the same user', async () => {
-    const { mockRunBid } = await import('./mock')
+    const { mockRunBid } = await import('./mocks')
     const payload = { slotCode: 'slot-01', region: '110000', age: 28, gender: 1, userId: 'u-1' }
 
     const first = await mockRunBid(payload)
@@ -22,7 +22,7 @@ describe('mock api', () => {
   })
 
   it('filters and paginates ads', async () => {
-    const { mockAds } = await import('./mock')
+    const { mockAds } = await import('./mocks')
     const page = await mockAds({ pageNum: 1, pageSize: 5, status: 1 })
     expect(page.list.length).toBeLessThanOrEqual(5)
     expect(page.list.every((ad) => ad.status === 1)).toBe(true)
@@ -30,14 +30,14 @@ describe('mock api', () => {
   })
 
   it('returns data explorer rows and CSV-friendly columns', async () => {
-    const { mockData } = await import('./mock')
+    const { mockData } = await import('./mocks')
     const data = await mockData('bid_log', { limit: 3 })
     expect(data.columns).toContain('request_id')
     expect(data.rows.length).toBe(3)
   })
 
   it('updates experiment switches', async () => {
-    const { mockExperiments, mockUpdateExperiments } = await import('./mock')
+    const { mockExperiments, mockUpdateExperiments } = await import('./mocks')
     const before = await mockExperiments()
     expect(before.frequencyEnabled).toBe(true)
     const after = await mockUpdateExperiments({ frequencyEnabled: false, frequencyMaxPerHour: 7 })
