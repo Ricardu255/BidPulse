@@ -1,4 +1,14 @@
-import type { AdInfo, AdTarget, AdView, BidResult, ExperimentsView, ReconReport } from '../types'
+import type {
+  AdInfo,
+  AdTarget,
+  AdView,
+  BidResult,
+  BidTrace,
+  ExperimentsView,
+  ReconReport,
+  TraceCandidate,
+  TraceStep,
+} from '../types'
 
 export const delay = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -84,14 +94,69 @@ export const state = {
   bidCounts: new Map<string, number>(),
 }
 
+/** mock 轨迹缓存：最近竞价列表点「轨迹」时按 requestId 回查。 */
+export const traceStore = new Map<string, BidTrace>()
+
+/** 生成一份与竞价结果自洽的 mock 轨迹，供 Playground 与最近竞价抽屉展示。 */
+export function mockTrace(
+  requestId: string,
+  winner: AdInfo | null,
+  payPrice: number | null,
+  priceMode: number,
+): BidTrace {
+  const fallback = winner == null
+  const candidates: TraceCandidate[] = CANDIDATES.map((candidate, index) => ({
+    adId: candidate.adId,
+    bid: candidate.bid,
+    price: !fallback && candidate.adId === winner.adId
+      ? payPrice
+      : Number((candidate.bid + 0.01).toFixed(2)),
+    result: !fallback && candidate.adId === winner.adId
+      ? 'SUCCESS'
+      : index === 2
+        ? 'FREQ_CAPPED'
+        : 'INSUFFICIENT',
+  }))
+  const steps: TraceStep[] = [
+    { stage: '检索', detail: `命中候选 ${CANDIDATES.length} 条`, costMs: 8 },
+    { stage: '过滤', detail: `定向过滤后 ${CANDIDATES.length} 条`, costMs: 0 },
+    { stage: '预热', detail: `候选预算 key 已就绪（${CANDIDATES.length} 条）`, costMs: 0 },
+    fallback
+      ? { stage: '兜底', detail: '返回兜底广告：BUDGET_EXHAUSTED', costMs: 12 }
+      : {
+          stage: '成交',
+          detail: `${priceMode === 1 ? '二价' : '一价'}成交 ${payPrice} 元（胜出价 ${winner.bid}）`,
+          costMs: 12,
+        },
+  ]
+  const trace: BidTrace = {
+    requestId,
+    ts: Date.now(),
+    outcome: fallback ? 'FALLBACK' : 'WIN',
+    fallbackReason: fallback ? 'BUDGET_EXHAUSTED' : null,
+    candidateCnt: CANDIDATES.length,
+    matchCnt: CANDIDATES.length,
+    winnerAdId: winner?.adId ?? null,
+    winBid: winner?.bid ?? null,
+    payPrice,
+    priceMode: fallback ? 2 : priceMode,
+    candidates,
+    steps,
+    timings: { dbMs: 8, redisMs: 12, totalMs: 21 },
+  }
+  traceStore.set(requestId, trace)
+  return trace
+}
+
 export function result(
   winner: AdInfo | null,
   payPrice: number | null,
   priceMode: number,
   fallback = false,
 ): BidResult {
+  const requestId = `mock-${Date.now().toString(36)}`
   return {
-    requestId: `mock-${Date.now().toString(36)}`,
+    requestId,
     hasAd: winner != null,
     fallback,
     winner,
@@ -100,5 +165,6 @@ export function result(
     topCandidates: CANDIDATES,
     priceMode,
     payPrice,
+    trace: mockTrace(requestId, fallback ? null : winner, payPrice, priceMode),
   }
 }

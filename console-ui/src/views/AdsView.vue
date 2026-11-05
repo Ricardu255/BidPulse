@@ -36,7 +36,10 @@ const editingId = ref<number | null>(null)
 const editingStatus = ref<number | null>(null)
 const editingDetail = ref<AdDetail | null>(null)
 
+let loadSeq = 0
+
 async function load(pageNum = page.pageNum): Promise<void> {
+  const seq = ++loadSeq
   loading.value = true
   try {
     const result = await getAds({
@@ -46,14 +49,16 @@ async function load(pageNum = page.pageNum): Promise<void> {
       advertiserId: filters.advertiserId,
       titleLike: filters.titleLike.trim() || undefined,
     })
+    // 快速切筛选/翻页时丢弃旧响应，避免旧列表覆盖新列表
+    if (seq !== loadSeq) return
     ads.value = result.list
     page.pageNum = result.pageNum
     page.pageSize = result.pageSize
     page.total = result.total
   } catch (e) {
-    ElMessage.error(errorText(e))
+    if (seq === loadSeq) ElMessage.error(errorText(e))
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -78,17 +83,21 @@ function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
 }
 
-const { loading: detailLoading, run: loadDetail } = useAsyncAction(
-  async (row: AdView) => {
-    detail.value = await getAdDetail(row.id)
-  },
+const { loading: detailLoading, run: fetchDetail } = useAsyncAction(
+  (row: AdView) => getAdDetail(row.id),
   notifyError,
 )
 
+let detailSeq = 0
+
 async function openDetail(row: AdView): Promise<void> {
+  const seq = ++detailSeq
   drawer.value = true
   detail.value = null
-  await loadDetail(row)
+  const result = await fetchDetail(row)
+  // 连续点不同行时，只接受最后一次点击的响应
+  if (seq !== detailSeq) return
+  detail.value = result ?? null
 }
 
 function openCreate(): void {
@@ -98,14 +107,19 @@ function openCreate(): void {
   formVisible.value = true
 }
 
+let editSeq = 0
+
 async function openEdit(row: AdView): Promise<void> {
+  const seq = ++editSeq
   try {
-    editingDetail.value = await getAdDetail(row.id)
+    const result = await getAdDetail(row.id)
+    if (seq !== editSeq) return
+    editingDetail.value = result
     editingId.value = row.id
-    editingStatus.value = editingDetail.value.ad.status
+    editingStatus.value = result.ad.status
     formVisible.value = true
   } catch (e) {
-    notifyError(e)
+    if (seq === editSeq) notifyError(e)
   }
 }
 

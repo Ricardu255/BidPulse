@@ -6,6 +6,7 @@ import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.console.dto.DltMessageView;
 import com.bidpulse.console.query.DltQueryService;
 import com.bidpulse.console.command.DltReplayAdminService;
+import com.bidpulse.console.command.IdempotencyService;
 import com.bidpulse.job.BudgetReconJob;
 import com.bidpulse.job.DltReplayJob;
 import com.bidpulse.job.ReconReportStore;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +37,7 @@ public class ConsoleOpsController {
     private final BudgetReconJob budgetReconJob;
     private final ReconReportStore reconReportStore;
     private final BidPulseProperties props;
+    private final IdempotencyService idempotencyService;
 
     @GetMapping("/dlt/messages")
     public ApiResponse<List<DltMessageView>> dltMessages(@RequestParam(defaultValue = "20") int limit) {
@@ -46,8 +49,11 @@ public class ConsoleOpsController {
     }
 
     @PostMapping("/dlt/replay")
-    public ApiResponse<DltReplayJob.ReplayStats> replay(@RequestParam(defaultValue = "100") int maxRecords) {
+    public ApiResponse<DltReplayJob.ReplayStats> replay(
+            @RequestParam(defaultValue = "100") int maxRecords,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireWrite();
+        idempotencyService.requireFresh("dlt-replay", idempotencyKey);
         int cap = Math.max(1, Math.min(maxRecords, 1000));
         try {
             return ApiResponse.ok(dltReplayJob.replayOnce(cap));
@@ -60,9 +66,12 @@ public class ConsoleOpsController {
      * 单条重放：返回投递结果；DLT 原记录保留，不推进定时任务位点。
      */
     @PostMapping("/dlt/replay-one")
-    public ApiResponse<Map<String, Object>> replayOne(@RequestParam int partition,
-                                                      @RequestParam long offset) {
+    public ApiResponse<Map<String, Object>> replayOne(
+            @RequestParam int partition,
+            @RequestParam long offset,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireWrite();
+        idempotencyService.requireFresh("dlt-replay-one", idempotencyKey);
         DltReplayJob.ReplayOutcome outcome = dltReplayAdminService.replayOne(partition, offset);
         return ApiResponse.ok(Map.of(
                 "partition", partition,
@@ -76,8 +85,10 @@ public class ConsoleOpsController {
     }
 
     @PostMapping("/recon/run")
-    public ApiResponse<ReconReportStore.ReconReport> runRecon() {
+    public ApiResponse<ReconReportStore.ReconReport> runRecon(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireWrite();
+        idempotencyService.requireFresh("recon-run", idempotencyKey);
         try {
             return ApiResponse.ok(budgetReconJob.runOnce());
         } catch (Exception e) {

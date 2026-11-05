@@ -1,8 +1,10 @@
 import { request, requestEnvelope } from './client'
+import { idempotentPost } from './idempotency'
 import {
   mockAdDetail,
   mockAds,
   mockAuditLogs,
+  mockBidTrace,
   mockBudget,
   mockChangeAdStatus,
   mockCreateAd,
@@ -32,6 +34,7 @@ import type {
   AuditLogView,
   BidRequest,
   BidResult,
+  BidTrace,
   BudgetView,
   BurstRow,
   DataQueryParams,
@@ -111,12 +114,12 @@ export function getKafkaGroups(): Promise<KafkaGroupView[]> {
 
 export function pauseConsumers(): Promise<{ status: string }> {
   if (USE_MOCK) return mockPause()
-  return request<{ status: string }>('/kafka/pause', { method: 'POST' })
+  return request<{ status: string }>('/kafka/pause', idempotentPost())
 }
 
 export function resumeConsumers(): Promise<{ status: string }> {
   if (USE_MOCK) return mockResume()
-  return request<{ status: string }>('/kafka/resume', { method: 'POST' })
+  return request<{ status: string }>('/kafka/resume', idempotentPost())
 }
 
 export function getOverview(): Promise<OverviewView> {
@@ -127,6 +130,12 @@ export function getOverview(): Promise<OverviewView> {
 export function getRecentBids(limit = 20): Promise<RecentBidView[]> {
   if (USE_MOCK) return mockRecentBids(limit)
   return request<RecentBidView[]>(`/bids/recent?limit=${encodeURIComponent(String(limit))}`)
+}
+
+/** 回看一次竞价的决策轨迹（仅控制台发起的竞价有轨迹）。 */
+export function getBidTrace(requestId: string): Promise<BidTrace> {
+  if (USE_MOCK) return mockBidTrace(requestId)
+  return request<BidTrace>(`/bids/${encodeURIComponent(requestId)}/trace`)
 }
 
 export function getAds(params: AdQueryParams): Promise<PageResult<AdView>> {
@@ -180,7 +189,7 @@ export function replayDlt(maxRecords = 100): Promise<DltReplayStats> {
   if (USE_MOCK) return mockReplayDlt(maxRecords)
   return request<DltReplayStats>(
     `/dlt/replay?maxRecords=${encodeURIComponent(String(maxRecords))}`,
-    { method: 'POST' },
+    idempotentPost(),
   )
 }
 
@@ -191,7 +200,7 @@ export function replayDltOne(
   if (USE_MOCK) return mockReplayDltOne(partition, offset)
   return request<{ partition: number; offset: number; outcome: string }>(
     `/dlt/replay-one?partition=${partition}&offset=${offset}`,
-    { method: 'POST' },
+    idempotentPost(),
   )
 }
 
@@ -202,7 +211,7 @@ export function getReconReport(): Promise<ReconReport | null> {
 
 export function runRecon(): Promise<ReconReport> {
   if (USE_MOCK) return mockRunRecon()
-  return request<ReconReport>('/recon/run', { method: 'POST' })
+  return request<ReconReport>('/recon/run', idempotentPost())
 }
 
 export function getData(table: string, params: DataQueryParams): Promise<DataView> {

@@ -44,4 +44,25 @@ describe('mock api', () => {
     expect(after.frequencyEnabled).toBe(false)
     expect(after.frequencyMaxPerHour).toBe(7)
   })
+
+  it('returns a self-consistent decision trace', async () => {
+    const { mockBidTrace, mockRunBid } = await import('./mocks')
+    const payload = { slotCode: 'slot-01', region: '110000', age: 28, gender: 1, userId: 'u-1' }
+
+    const { result } = await mockRunBid(payload)
+    expect(result.trace?.outcome).toBe('WIN')
+    expect(result.trace?.winnerAdId).toBe(result.winner?.adId)
+    expect(result.trace?.candidates.some((candidate) => candidate.result === 'SUCCESS')).toBe(true)
+
+    const trace = await mockBidTrace(result.requestId)
+    expect(trace.requestId).toBe(result.requestId)
+    expect(trace.timings.totalMs).toBeGreaterThan(0)
+  })
+
+  it('marks which recent bids have a trace', async () => {
+    const { mockRecentBids } = await import('./mocks')
+    const rows = await mockRecentBids(10)
+    expect(rows.every((row) => typeof row.hasTrace === 'boolean')).toBe(true)
+    expect(rows.some((row) => row.hasTrace)).toBe(true)
+  })
 })

@@ -63,6 +63,8 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 - **可丢明细异步落库**：竞价明细走本地有界队列，500 条或 200ms 批量刷盘，队列满直接丢，绝不阻塞主链路。
 - **预算生命周期完整**：检索阶段预热 key、Lua 惰性播种、日预算复位、管理端改预算当天同步 Redis、历史 key 定时清理。
 - **可观测**：Actuator 健康检查、Metrics、Prometheus；消费组 lag 查询接口。
+- **决策轨迹可回看**：控制台发起的竞价会记录候选裁决（成交 / 余额不足 / 频次超限 / 需播种 / Redis 异常）、兜底原因与耗时分解，随明细异步落 `bid_log.trace_json`；外部 `/bid` 不采集，热路径零额外开销。
+- **运维写幂等 + 前端 latest-wins**：DLT 重放、对账、暂停/恢复消费支持 `Idempotency-Key`（Redis `SET NX PX`，10 分钟窗口，重复 409）；控制台轮询改为不重叠 + 请求序号最新优先，超时未更新时明确标记「数据可能已过期」。
 - **演示控制台（前后端分离）**：独立 `console-ui/`（Vue 3 + Vite + Element Plus），通过 `/console-api/v1` 展示概览、竞价结果、广告投放、预算/频次状态、Kafka/DLT/对账、数据浏览与运行时开关；后端不渲染页面。
 
 ---
@@ -270,6 +272,19 @@ P0/P1/P2/P3 页面：概览、竞价实验室、广告与投放、预算与频�
 - `userId`（可选，≤ 64 字符）：传了才做实时频次控制；不传视为匿名流量，不读写频次 key。
 - 响应统一为 `ApiResponse`：`code / msg / data / wallMs`；`data.priceMode` 为 0 一价 / 1 二价 / 2 兜底。
 
+### 控制台竞价与轨迹
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/console-api/v1/bids` | 与 `/bid` 同链路，额外返回 `data.trace` 并异步落库（OPERATOR） |
+| GET | `/console-api/v1/bids/recent` | 最近竞价明细，`hasTrace` 标记该条是否可回看 |
+| GET | `/console-api/v1/bids/{requestId}/trace` | 回看决策轨迹；`requestId` 为 32 位小写十六进制 |
+
+轨迹包含 `outcome`（`WIN` / `FALLBACK` / `EMPTY`）、`fallbackReason`、候选裁决
+（`SUCCESS` / `INSUFFICIENT` / `FREQ_CAPPED` / `NEEDS_SEED` / `REDIS_ERROR`）、时间线步骤与
+`timings.dbMs / redisMs / totalMs`。候选最多保留 10 条，不记录用户标识等请求上下文。
+明细异步刷盘（≤200ms），刚发起的竞价可能短暂 404，前端会延迟重试。
+
 ### 管理端
 
 除 `POST /bid`、health/info、登录接口外，控制台与管理端均需要 Bearer token：
@@ -293,6 +308,8 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 
 注意：
 
+- 运维写接口（DLT 重放、单条重放、对账、暂停/恢复消费）支持可选的 `Idempotency-Key` 请求头：
+  同一操作 10 分钟内重复提交返回 409；不带头则保持旧行为；Redis 不可用时 fail-open（记 warn 后继续执行）。
 - `status=3`（已耗尽）是系统状态，不接受手工指定。
 - 修改 `dailyBudget` 且事务提交成功后，会自动按「新日预算 − 今日已消耗」重算当天 Redis 余额，**当天生效**。
 - 把 `status` 从 3 改回 1 本身不会重置预算；需要同时修改日预算（或等次日 00:05 复位任务）。
@@ -396,6 +413,37 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
   `REPEATABLE_READ` 只读事务里读取，避免并发写入时拼出「请求数已更新、消耗还没更新」的自相矛盾数字；
   Kafka lag 与 Actuator 健康检查在事务外执行，外部 RPC 不会拖长只读事务。
 
+### 11. 决策轨迹：只给控制台，不碰热路径
+
+`BidService.bid(req)` 与 `bid(req, captureTrace)` 共用同一条链路，只有控制台入口传 `true`。
+轨迹在关键决策点增量记录（候选检索、定向过滤、预算预热、每个候选的扣减裁决、成交/兜底），
+不额外查询数据库、不额外调用 Redis；序列化与落库都在 `emit` 的异步明细管道里完成。
+
+- **可解释**：为什么是 A 赢、B 为什么被跳过、最终为什么走兜底，都能在同一份 JSON 里回答；
+- **有边界**：候选最多 10 条，只含广告 ID / 出价 / 成交价 / 裁决结果，不含用户上下文；
+- **可丢弃**：`trace_json` 随 `bid_log` 走本地队列，队列满或写库失败只丢明细，不影响竞价返回；
+- **可回看**：`GET /console-api/v1/bids/{requestId}/trace` 从只读池读取，前端用时间线展示。
+
+### 12. 运维写幂等：把「双击」变成 409
+
+重放 DLT、对账、暂停消费都是重复执行有副作用的操作。前端每次点击生成一个 UUID 作为
+`Idempotency-Key`，服务端用 Redis `SET NX PX` 原子占位：
+
+- 首次占位成功 → 正常执行；10 分钟内同 scope + key 再次到达 → 409，不触达任务；
+- 不同操作使用不同 scope，相同 key 互不影响；
+- 不带头（脚本、老客户端）→ 不做检查，保持向后兼容；
+- Redis 故障 → fail-open，只记 warn；幂等是增强能力，不能让止损操作整体不可用；
+- 执行失败不释放 key：失败重试应换新 key，避免「先失败、后成功」被误判为重复。
+
+### 13. 前端轮询：不重叠、最新优先、显式陈旧
+
+控制台轮询统一收进 `createPollingController`（纯函数，可脱离组件做单测）：
+
+- **不重叠**：上一轮未结束，定时器直接跳过本轮，慢接口不会堆叠；
+- **latest-wins**：每轮携带递增序号，只有最新序号的响应能写页面，旧响应即使后到也丢弃；
+- **可中止**：页面切换/参数变化时 `stop()` 清理定时器；手动刷新与定时刷新共享同一个 in-flight 守卫；
+- **陈旧可见**：超过一个轮询周期没有成功更新时，页面显示「数据可能已过期」，而不是把旧数据当实时数据。
+
 ---
 
 ## 七、关键配置
@@ -472,11 +520,11 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 ```
 src/main/java/com/bidpulse
 ├─ api/                 HTTP 边界：controller、dto、统一响应与异常
-├─ bid/                 竞价领域：BidService、PricingPolicy、FallbackAdProvider、TargetingResolver
+├─ bid/                 竞价领域：BidService、BidTraceBuilder、PricingPolicy、FallbackAdProvider、TargetingResolver
 ├─ admin/               管理端服务
 ├─ auth/                登录、Bearer token、角色与安全过滤链
 ├─ audit/               审计：写操作、登录与被拒绝的 401/403
-├─ console/             控制台 BFF：api / command / query / dto / config
+├─ console/             控制台 BFF：api / command（含 IdempotencyService）/ query（含轨迹回看）/ dto / config
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
 │  ├─ persistence/      MyBatis Mapper（AdMapper、AuditLogMapper）
@@ -491,12 +539,12 @@ src/main/java/com/bidpulse
 src/test/java/com/bidpulse         测试包与主代码一一对应
 ├─ BidFlowTest          端到端（真连 MySQL / Redis / Kafka）
 ├─ api/                 HTTP 边界错误（404 / 415）
-├─ bid/                 二价定价、兜底广告缓存
+├─ bid/                 二价定价、兜底广告缓存、决策轨迹构建
 ├─ auth/                登录、角色矩阵、安全过滤链
 ├─ audit/               审计过滤（写操作 + 安全拒绝）
 ├─ breaker/             Sentinel 熔断门
 ├─ config/              配置绑定/校验、生产密钥守卫、Kafka 重试策略、时区守卫
-├─ console/             控制台 REST 契约、查询、CORS
+├─ console/             控制台 REST 契约、查询、轨迹回看、幂等键、CORS
 ├─ job/                 预算对账、DLT 重放
 ├─ admin/               广告管理、事务回滚/提交
 ├─ testsupport/         集成测试守卫与 @BidPulseIntegrationTest 注解
@@ -524,7 +572,7 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 mvn test
 ```
 
-默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 114 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算。
+默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 131 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算、决策轨迹构建与查询边界、幂等键首放/重复/超长/fail-open、前端轮询控制器不重叠与最新优先。
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
@@ -532,7 +580,7 @@ mvn test
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）、`AdAdminTransactionTest`（2，预算变更事务回滚/提交）、`BillingPayloadConflictTest`（5，重复投递/载荷冲突/去重记录过期后的迟到重放/旧账单指纹回填/并发重复投递）与 `ConsoleReadPoolTest`（4，双池隔离/只读拒写/只读事务拒写/概览真实查询），共 41 个用例。
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）、`AdAdminTransactionTest`（2，预算变更事务回滚/提交）、`BillingPayloadConflictTest`（5，重复投递/载荷冲突/去重记录过期后的迟到重放/旧账单指纹回填/并发重复投递）、`ConsoleReadPoolTest`（4，双池隔离/只读拒写/只读事务拒写/概览真实查询）、`ConsoleBidTraceIntegrationTest`（2，控制台轨迹落库可回看 + 外部 `/bid` 不采集）与 `IdempotencyRedisTest`（1，真实 Redis 下同 key 第二次 409），共 44 个用例。
 
 这些类统一使用 `testsupport/BidPulseIntegrationTest`，隔离分三层：
 
@@ -557,7 +605,7 @@ BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
 mvn test -Pfull-tests
 ```
 
-加上 114 个纯单测，全量为 155 个用例。
+加上 131 个纯单测，全量为 175 个用例。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。
@@ -579,7 +627,7 @@ mvn test -Pfull-tests
 ```bash
 cd console-ui
 npm run lint      # ESLint 9：Vue + TypeScript
-npm test          # Vitest：格式化、mock 频率上限/分页/数据/实验开关
+npm test          # Vitest：格式化、mock 频率上限/分页/数据/实验开关、轮询 latest-wins、幂等键
 npm run test:e2e  # Playwright：mock 模式自动起 Vite
 ```
 

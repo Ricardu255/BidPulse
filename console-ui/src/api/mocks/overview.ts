@@ -1,10 +1,11 @@
 import type {
+  BidTrace,
   DataQueryParams,
   DataView,
   OverviewView,
   RecentBidView,
 } from '../types'
-import { MOCK_ADS, delay, state } from './shared'
+import { CANDIDATES, MOCK_ADS, delay, mockTrace, state, traceStore } from './shared'
 import { FALLBACK_AD_ID } from '@/constants'
 
 export async function mockOverview(): Promise<OverviewView> {
@@ -36,17 +37,28 @@ export async function mockRecentBids(limit = 20): Promise<RecentBidView[]> {
   await delay(140)
   return Array.from({ length: Math.min(limit, 50) }, (_, index) => {
     const fallback = index === 6 || index === 13
-    const winner = fallback ? null : index % 3 === 0 ? 106 : 110
+    const winnerId = fallback ? null : index % 3 === 0 ? 106 : 110
+    const payPrice = fallback ? null : winnerId === 110 ? 1.01 : 0.81
+    const requestId = `mock-${(1730000000000 + index).toString(36)}`
+    const winner = winnerId === 110 ? CANDIDATES[0] : winnerId === 106 ? CANDIDATES[1] : null
+    mockTrace(requestId, fallback ? null : winner, payPrice, fallback ? 2 : 1)
     return {
-      requestId: `mock-${(1730000000000 + index).toString(36)}`,
-      adId: fallback ? FALLBACK_AD_ID : winner,
-      winBid: fallback ? null : winner === 110 ? 1.5 : 1.0,
-      payPrice: fallback ? null : winner === 110 ? 1.01 : 0.81,
+      requestId,
+      adId: fallback ? FALLBACK_AD_ID : winnerId,
+      winBid: fallback ? null : winnerId === 110 ? 1.5 : 1.0,
+      payPrice,
       hasAd: true,
       costMs: 28 + ((index * 7) % 24),
       bidAt: `2026-10-31 10:${String(20 + (index % 40)).padStart(2, '0')}:00`,
+      hasTrace: index % 5 !== 4,
     }
   })
+}
+
+/** 按 requestId 回查 mock 轨迹；找不到时给一份通用的胜出轨迹。 */
+export async function mockBidTrace(requestId: string): Promise<BidTrace> {
+  await delay(120)
+  return traceStore.get(requestId) ?? mockTrace(requestId, CANDIDATES[0], 1.01, 1)
 }
 
 export async function mockData(table: string, params: DataQueryParams): Promise<DataView> {

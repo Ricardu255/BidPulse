@@ -4,6 +4,7 @@ import com.bidpulse.entity.Ad;
 import com.bidpulse.infra.persistence.AdMapper;
 import com.bidpulse.infra.redis.BudgetService;
 import com.bidpulse.event.BidEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.bidpulse.infra.kafka.BidEventPublisher;
 import com.bidpulse.infra.buffer.BidDetailBuffer;
 import com.bidpulse.infra.buffer.ExhaustedBuffer;
@@ -65,6 +66,9 @@ public class BidService {
     /** 统一配置（超时 / 候选上限 / 兜底 / 最小加价），不再散落 @Value */
     private final BidPulseProperties props;
 
+    /** 仅控制台竞价需要：把决策轨迹序列化成 JSON 随 bid_log 异步落库 */
+    private final ObjectMapper objectMapper;
+
 
     /** M5/M8：DB 与 Redis 各自独立的熔断门（impl 可切 sentinel / local），互不影响 */
     private final BreakerGate dbBreaker;
@@ -97,6 +101,7 @@ public class BidService {
                       BidDetailBuffer bidDetailBuffer,
                       ExhaustedBuffer exhaustedBuffer,
                       BidPulseProperties props,
+                      ObjectMapper objectMapper,
                       @Qualifier("dbBreakerGate") BreakerGate dbBreaker,
                       @Qualifier("redisBreakerGate") BreakerGate redisBreaker) {
         this.adMapper = adMapper;
@@ -106,6 +111,7 @@ public class BidService {
         this.bidDetailBuffer = bidDetailBuffer;
         this.exhaustedBuffer = exhaustedBuffer;
         this.props = props;
+        this.objectMapper = objectMapper;
         this.dbBreaker = dbBreaker;
         this.redisBreaker = redisBreaker;
     }
@@ -115,6 +121,17 @@ public class BidService {
      * M6 下每个出口在 return 前都会异步发布一条竞价事件（旁路，不影响返回）。
      */
     public BidRequest.Result bid(BidRequest req) {
+        return bid(req, false);
+    }
+
+    /**
+     * 执行一次竞价。
+     *
+     * @param captureTrace 是否采集决策轨迹。只有控制台入口传 true：
+     *                     外部 {@code /bid} 保持热路径零额外开销；轨迹只随 bid_log 异步落库，
+     *                     不改变竞价结果本身。
+     */
+    public BidRequest.Result bid(BidRequest req, boolean captureTrace) {
         // 本次竞价请求的全局唯一 ID，用于日志追踪、数据对账与 Kafka 事件关联
         String requestId = UUID.randomUUID().toString().replace("-", "");
         // 链路起点（纳秒），后续各阶段耗时都以它为基准计算
@@ -125,11 +142,15 @@ public class BidService {
         int candidateCostMs = 0;
         // 计费（Redis 预算扣减）阶段耗时（ms），初始 0，扣减完成后回填，用于埋点与对账
         int billCostMs = 0;
+        // 决策轨迹只在控制台竞价时创建；为 null 时所有 trace 调用都会被跳过
+        BidTraceBuilder trace = captureTrace ? new BidTraceBuilder(requestId) : null;
 
         // 强制兜底（演示/复现开关）：直接返回兜底广告，模拟依赖全面故障
         if (props.getFallback().isForce()) {
             BidRequest.Result r = buildFallback(requestId);
-            emit(requestId, req, r, ms(startNanos, System.nanoTime()), 0, 0);
+            int total = ms(startNanos, System.nanoTime());
+            finishFallbackTrace(trace, r, total, "FORCE", 0);
+            emit(requestId, req, r, total, 0, 0);
             return r;
         }
 
@@ -145,21 +166,34 @@ public class BidService {
         if (candidates == null) {
             // 候选检索失败（DB 熔断 OPEN / 超时 / 异常）→ 兜底，绝不返回空结果
             BidRequest.Result r = buildFallback(requestId);
+            int total = ms(startNanos, System.nanoTime());
+            if (trace != null) {
+                trace.retrieveFailed(candidateCostMs);
+            }
+            finishFallbackTrace(trace, r, total, "DB_UNAVAILABLE", 0);
             // 发布一条兜底竞价事件（旁路），并带上已统计的候选检索耗时
-            emit(requestId, req, r, ms(startNanos, System.nanoTime()), candidateCostMs, 0);
+            emit(requestId, req, r, total, candidateCostMs, 0);
             // 直接返回兜底结果，结束本次竞价
             return r;
+        }
+        if (trace != null) {
+            trace.retrieved(candidates.size(), candidateCostMs);
         }
 
         // ---------------------------------------------------------
         // ② 定向过滤已在 SQL 的 WHERE/JOIN 完成，这里仅作拷贝占位
         // ---------------------------------------------------------
         List<Ad> matched = new ArrayList<>(candidates);
+        if (trace != null) {
+            trace.matched(matched.size());
+        }
 
         // 候选为空（检索无命中）→ 兜底，不返回空广告
         if (matched.isEmpty()) {
             BidRequest.Result r = buildFallback(requestId);
-            emit(requestId, req, r, ms(startNanos, System.nanoTime()), candidateCostMs, 0);
+            int total = ms(startNanos, System.nanoTime());
+            finishFallbackTrace(trace, r, total, "NO_CANDIDATE", 0);
+            emit(requestId, req, r, total, candidateCostMs, 0);
             return r;
         }
 
@@ -168,6 +202,9 @@ public class BidService {
         // best-effort：失败忽略，计费时 Lua 也会带 TTL 惰性播种。
         try {
             budgetService.warmBudgets(matched);
+            if (trace != null) {
+                trace.warmed(matched.size());
+            }
         } catch (Exception e) {
             log.warn("预算预热失败（忽略，计费时惰性兜底）requestId={}: {}", requestId, e.getMessage());
         }
@@ -193,9 +230,14 @@ public class BidService {
         // 二价只读余额按请求缓存：扣减失败不会改 Redis 余额，扣减成功会立即 break，
         // 因此同一请求内同一竞争者被 fall-through 反复看到时无需重复查询。
         Map<Long, BigDecimal> balanceCache = new HashMap<>();
+        // 兜底原因代码：正常成交时为 null；循环内的 break 会写明是哪一类失败
+        String fallbackReason = null;
+        int insufficient = 0;
+        int freqCapped = 0;
         for (int i = 0; i < matched.size(); i++) {
             // 整体超时预算耗尽 → 放弃后续计费，兜底收尾
             if (System.nanoTime() > deadline) {
+                fallbackReason = "DEADLINE_EXCEEDED";
                 break;
             }
             Ad candidate = matched.get(i);
@@ -208,10 +250,16 @@ public class BidService {
             } catch (BreakerOpenException e) {
                 // 只读余额查询也受同一 Redis 熔断门保护：未放行视为 Redis 不可用，整段计费放弃
                 log.warn("Redis 余额查询熔断短路（未放行），走兜底");
+                fallbackReason = "REDIS_UNAVAILABLE";
+                if (trace != null) {
+                    // 成交价还没算出来：记 null，说明「本来在评估它，Redis 先挂了」
+                    trace.candidate(candidate.getId(), candidate.getBid(), null, "REDIS_ERROR");
+                }
                 break;
             }
             if (secondPrice == null) {
                 // 只读查询已耗尽总超时预算：不再尝试计费，兜底收尾
+                fallbackReason = "DEADLINE_EXCEEDED";
                 break;
             }
             // 计费最小货币单位是「分」：把理论成交价显式量化到 2 位小数（向下取整，
@@ -231,6 +279,10 @@ public class BidService {
             } catch (BreakerOpenException e) {
                 // 熔断未放行（短路，未触达 Redis）→ 本请求不再尝试任何候选，整段计费放弃 → 兜底
                 log.warn("Redis 计费熔断短路（未放行），走兜底");
+                fallbackReason = "REDIS_UNAVAILABLE";
+                if (trace != null) {
+                    trace.candidate(candidate.getId(), candidate.getBid(), price, "REDIS_ERROR");
+                }
                 break;
             } catch (Exception e) {
                 // 仅 Lettuce 命令超时 / 连接异常才算 Redis 失败；
@@ -239,6 +291,10 @@ public class BidService {
                 // 继续遍历只会把整个 SLA 预算（1000ms）耗在重复超时上，直接放弃计费走兜底。
                 log.warn("Redis 计费失败（超时/异常），跳过剩余候选走兜底: {} - {}",
                         e.getClass().getSimpleName(), e.getMessage());
+                fallbackReason = "REDIS_UNAVAILABLE";
+                if (trace != null) {
+                    trace.candidate(candidate.getId(), candidate.getBid(), price, "REDIS_ERROR");
+                }
                 break;
             }
 
@@ -249,6 +305,10 @@ public class BidService {
                 // 慢调用/失败，否则会把好好的 Redis 熔断器打开。
                 if (System.nanoTime() > deadline) {
                     // SLA 已耗尽，别再用一轮 DB 重建把请求拖得更久
+                    fallbackReason = "DEADLINE_EXCEEDED";
+                    if (trace != null) {
+                        trace.candidate(candidate.getId(), candidate.getBid(), price, "NEEDS_SEED");
+                    }
                     break;
                 }
                 try {
@@ -256,6 +316,10 @@ public class BidService {
                 } catch (Exception e) {
                     log.warn("预算冷启动重建失败（DB 查询/写入异常），跳过剩余候选走兜底 adId={}: {} - {}",
                             candidate.getId(), e.getClass().getSimpleName(), e.getMessage());
+                    fallbackReason = "BUDGET_SEED_FAILED";
+                    if (trace != null) {
+                        trace.candidate(candidate.getId(), candidate.getBid(), price, "NEEDS_SEED");
+                    }
                     break;
                 }
                 try {
@@ -263,15 +327,27 @@ public class BidService {
                             candidate.getId(), candidate.getDailyBudget(), price, req.getUserId()));
                 } catch (BreakerOpenException e) {
                     log.warn("Redis 计费熔断短路（未放行），走兜底");
+                    fallbackReason = "REDIS_UNAVAILABLE";
+                    if (trace != null) {
+                        trace.candidate(candidate.getId(), candidate.getBid(), price, "REDIS_ERROR");
+                    }
                     break;
                 } catch (Exception e) {
                     log.warn("Redis 计费失败（重建后重试，超时/异常），走兜底: {} - {}",
                             e.getClass().getSimpleName(), e.getMessage());
+                    fallbackReason = "REDIS_UNAVAILABLE";
+                    if (trace != null) {
+                        trace.candidate(candidate.getId(), candidate.getBid(), price, "REDIS_ERROR");
+                    }
                     break;
                 }
                 if (result == BudgetService.DeductResult.NEEDS_SEED) {
                     // 播种后双 key 仍缺失（写入被拒 / 再次 FLUSH）：绝不能按「整笔日预算」放款
                     log.warn("预算重建后仍无法扣减，跳过剩余候选走兜底 adId={}", candidate.getId());
+                    fallbackReason = "BUDGET_SEED_FAILED";
+                    if (trace != null) {
+                        trace.candidate(candidate.getId(), candidate.getBid(), price, "NEEDS_SEED");
+                    }
                     break;
                 }
             }
@@ -290,7 +366,16 @@ public class BidService {
             // 频次超限（FREQ_CAPPED）是正常业务结果：只跳过该候选，绝不能标成已耗尽——
             // 否则一个用户刷满频次就会让广告对所有人下线。
             if (result == BudgetService.DeductResult.INSUFFICIENT) {
+                insufficient++;
                 exhaustedToMark.add(candidate.getId());
+                if (trace != null) {
+                    trace.candidate(candidate.getId(), candidate.getBid(), price, "INSUFFICIENT");
+                }
+            } else if (result == BudgetService.DeductResult.FREQ_CAPPED) {
+                freqCapped++;
+                if (trace != null) {
+                    trace.candidate(candidate.getId(), candidate.getBid(), price, "FREQ_CAPPED");
+                }
             }
         }
 
@@ -308,7 +393,22 @@ public class BidService {
         // Redis 熔断 OPEN / 预算全部不足 / 整体超时 → 兜底广告保底
         if (winner == null) {
             BidRequest.Result r = buildFallback(requestId);
-            emit(requestId, req, r, ms(startNanos, System.nanoTime()), candidateCostMs, billCostMs);
+            int total = ms(startNanos, System.nanoTime());
+            // 循环内 break 已写明具体故障；自然走完循环则按候选裁决结果归纳
+            String reason = fallbackReason;
+            if (reason == null) {
+                if (insufficient > 0 && freqCapped > 0) {
+                    reason = "BUDGET_AND_FREQ_EXHAUSTED";
+                } else if (insufficient > 0) {
+                    reason = "BUDGET_EXHAUSTED";
+                } else if (freqCapped > 0) {
+                    reason = "FREQ_CAPPED";
+                } else {
+                    reason = "NO_PAYABLE_CANDIDATE";
+                }
+            }
+            finishFallbackTrace(trace, r, total, reason, billCostMs);
+            emit(requestId, req, r, total, candidateCostMs, billCostMs);
             return r;
         }
 
@@ -318,8 +418,30 @@ public class BidService {
         //         costMs, candidateCost, filterCost, sortCost, billCost);
 
         BidRequest.Result r = buildResult(requestId, candidates, matched, winner, payPrice, priceMode);
-        emit(requestId, req, r, ms(startNanos, System.nanoTime()), candidateCostMs, billCostMs);
+        int total = ms(startNanos, System.nanoTime());
+        if (trace != null) {
+            trace.won(winner.getId(), winner.getBid(), payPrice, priceMode, billCostMs);
+            r.setTrace(trace.build(total));
+        }
+        emit(requestId, req, r, total, candidateCostMs, billCostMs);
         return r;
+    }
+
+    /**
+     * 统一收尾「没成交」的轨迹：兜底广告记 FALLBACK，兜底关闭时记 EMPTY，
+     * 再把轨迹挂到返回结果上（仅控制台竞价有 trace，外部 /bid 为 null）。
+     */
+    private void finishFallbackTrace(BidTraceBuilder trace, BidRequest.Result r,
+                                     int totalMs, String reason, int billMs) {
+        if (trace == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(r.getFallback())) {
+            trace.fallback(reason, billMs);
+        } else {
+            trace.empty(reason, billMs);
+        }
+        r.setTrace(trace.build(totalMs));
     }
 
     /**
@@ -454,31 +576,35 @@ public class BidService {
         publishBidEvent(requestId, req.getRegion(), req.getUserId(), r);
         // 2) 竞价明细入本地有界队列，后台线程批量落库（可丢、可采样）
         try {
-            BidLog log = new BidLog();
-            log.setRequestId(requestId);
-            log.setAdId(r.getWinner() != null ? r.getWinner().getAdId() : null);
-            log.setAdvertiserId(r.getWinner() != null ? r.getWinner().getAdvertiserId() : null);
-            log.setSlotCode(req.getSlotCode());
-            log.setRegion(req.getRegion());
-            log.setAge(req.getAge());
+            BidLog detail = new BidLog();
+            detail.setRequestId(requestId);
+            detail.setAdId(r.getWinner() != null ? r.getWinner().getAdId() : null);
+            detail.setAdvertiserId(r.getWinner() != null ? r.getWinner().getAdvertiserId() : null);
+            detail.setSlotCode(req.getSlotCode());
+            detail.setRegion(req.getRegion());
+            detail.setAge(req.getAge());
             // bid_log.gender 是 NOT NULL，0 表示「未知」（与 DTO 注释口径一致）；
             // age 列已放宽为可空：只传 ageBucket 的请求不应被伪造成 age=0（0 是合法年龄）。
-            log.setGender(req.getGender() != null ? req.getGender() : 0);
-            log.setInterests(req.getInterests() != null ? req.getInterests() : "");
-            log.setCandidateCnt(r.getCandidateCnt());
-            log.setMatchCnt(r.getMatchCnt());
-            log.setHasAd(Boolean.TRUE.equals(r.getHasAd()) ? 1 : 0);
-            log.setWinBid(r.getWinner() != null ? r.getWinner().getBid() : null);
-            log.setPayPrice(r.getPayPrice());
-            log.setCostMs(costMs);
-            log.setCandidateCost(candidateCostMs);
+            detail.setGender(req.getGender() != null ? req.getGender() : 0);
+            detail.setInterests(req.getInterests() != null ? req.getInterests() : "");
+            detail.setCandidateCnt(r.getCandidateCnt());
+            detail.setMatchCnt(r.getMatchCnt());
+            detail.setHasAd(Boolean.TRUE.equals(r.getHasAd()) ? 1 : 0);
+            detail.setWinBid(r.getWinner() != null ? r.getWinner().getBid() : null);
+            detail.setPayPrice(r.getPayPrice());
+            detail.setCostMs(costMs);
+            detail.setCandidateCost(candidateCostMs);
             // 定向过滤与出价排序在 M1 已下推进 SQL（WHERE/JOIN/ORDER BY a.bid DESC），
             // 不单独计时，瓶颈完全落在 candidate_cost（DB 检索）。
-            log.setFilterCost(0);
-            log.setSortCost(0);
-            log.setBillCost(billCostMs);
-            log.setBidAt(LocalDateTime.now());
-            bidDetailBuffer.enqueue(log);
+            detail.setFilterCost(0);
+            detail.setSortCost(0);
+            detail.setBillCost(billCostMs);
+            detail.setBidAt(LocalDateTime.now());
+            // 轨迹只随明细异步落库：序列化失败只会丢 trace，不影响竞价结果本身
+            if (r.getTrace() != null) {
+                detail.setTraceJson(objectMapper.writeValueAsString(r.getTrace()));
+            }
+            bidDetailBuffer.enqueue(detail);
         } catch (Exception ex) {
             log.warn("构造/入队竞价明细失败（忽略，不影响竞价返回）requestId={}: {}", requestId, ex.getMessage());
         }

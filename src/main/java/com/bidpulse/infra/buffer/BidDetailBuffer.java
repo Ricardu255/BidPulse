@@ -66,8 +66,8 @@ public class BidDetailBuffer implements InitializingBean, DisposableBean {
     private static final String SQL =
             "INSERT IGNORE INTO bid_log (request_id, ad_id, advertiser_id, slot_code, region, age, gender, interests, "
                     + "candidate_cnt, match_cnt, has_ad, win_bid, pay_price, "
-                    + "cost_ms, candidate_cost, filter_cost, sort_cost, bill_cost, bid_at) "
-                    + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                    + "cost_ms, candidate_cost, filter_cost, sort_cost, bill_cost, bid_at, trace_json) "
+                    + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     public BidDetailBuffer(JdbcTemplate jdbc, BidPulseProperties props) {
         this.jdbc = jdbc;
@@ -213,7 +213,7 @@ public class BidDetailBuffer implements InitializingBean, DisposableBean {
                 l.getCandidateCnt(), l.getMatchCnt(), l.getHasAd(),
                 l.getWinBid(), l.getPayPrice(),
                 l.getCostMs(), l.getCandidateCost(), l.getFilterCost(), l.getSortCost(), l.getBillCost(),
-                l.getBidAt()
+                l.getBidAt(), l.getTraceJson()
         };
     }
 }

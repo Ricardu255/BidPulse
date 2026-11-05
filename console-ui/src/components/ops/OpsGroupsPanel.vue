@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FilterBar from '@/components/FilterBar.vue'
+import StaleNotice from '@/components/StaleNotice.vue'
 import { getKafkaGroups, pauseConsumers, resumeConsumers } from '@/api/console'
 import type { KafkaGroupView, KafkaPartitionView } from '@/api/types'
 import { errorText } from '@/format'
@@ -21,18 +22,33 @@ function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
 }
 
-async function refreshGroups(): Promise<void> {
+// 轮询失败只标记「陈旧」，保留上一次成功的数据；手动刷新才弹 toast
+const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
+  async ({ isCurrent, scheduled }) => {
+    try {
+      const result = await getKafkaGroups()
+      if (!isCurrent()) return
+      groups.value = result
+      partitions.value = result.flatMap((group) =>
+        group.partitions.map((partition) => ({ group: group.group, ...partition })),
+      )
+    } catch (e) {
+      if (isCurrent() && !scheduled) notifyError(e)
+      throw e
+    }
+  },
+  2000,
+  () => auto.value && props.active,
+)
+
+let manualLoads = 0
+function refreshGroups(): Promise<void> {
+  manualLoads += 1
   loading.value = true
-  try {
-    groups.value = await getKafkaGroups()
-    partitions.value = groups.value.flatMap((group) =>
-      group.partitions.map((partition) => ({ group: group.group, ...partition })),
-    )
-  } catch (e) {
-    notifyError(e)
-  } finally {
-    loading.value = false
-  }
+  return refreshData().finally(() => {
+    manualLoads -= 1
+    if (manualLoads === 0) loading.value = false
+  })
 }
 
 async function pause(): Promise<void> {
@@ -61,7 +77,6 @@ async function resume(): Promise<void> {
   }
 }
 
-usePolling(refreshGroups, 2000, () => auto.value && props.active)
 onMounted(refreshGroups)
 </script>
 
@@ -75,6 +90,8 @@ onMounted(refreshGroups)
       <span class="hint">积压 = 末端位点 − 已提交位点；负值按 0 处理。</span>
     </FilterBar>
   </el-card>
+
+  <StaleNotice :stale="stale" :last-updated-at="lastUpdatedAt" />
 
   <div class="group-grid">
     <div v-for="group in groups" :key="group.group" class="group-card">

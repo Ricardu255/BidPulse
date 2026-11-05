@@ -22,7 +22,7 @@
 --   初始化时不要再单独执行，只用本文件。
 --
 -- 与迁移的关系：
---   本 baseline 已包含 sql/migrations/ 下 20261105_01 ~ 07 的全部结构变更，
+--   本 baseline 已包含 sql/migrations/ 下 20261105_01 ~ 08 的全部结构变更，
 --   并在 schema_migration 中记录这些版本；因此全新库执行完本文件后，
 --   再跑迁移脚本只会命中「已存在则跳过」分支，不会重复改结构。
 -- =====================================================================
@@ -128,6 +128,7 @@ CREATE TABLE bid_log (
   sort_cost      INT             NOT NULL COMMENT '排序耗时',
   bill_cost      INT             NOT NULL COMMENT '计费耗时',
   bid_at         DATETIME(3)     NOT NULL COMMENT '竞价时间，M8-3 按此字段做 RANGE 分区',
+  trace_json     JSON                     DEFAULT NULL COMMENT '决策轨迹 JSON，仅控制台竞价写入；可采样、不参与对账',
   PRIMARY KEY (id),
   UNIQUE KEY uk_request (request_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='竞价明细';
@@ -235,4 +236,5 @@ INSERT IGNORE INTO schema_migration(version, description) VALUES
   ('20261105_04', 'ad.idx_adv'),
   ('20261105_05', 'ad_target.uk_ad_dim'),
   ('20261105_06', 'audit_log 建表'),
-  ('20261105_07', 'processed_event/billing_event payload_hash');
+  ('20261105_07', 'processed_event/billing_event payload_hash'),
+  ('20261105_08', 'bid_log.trace_json 决策轨迹');

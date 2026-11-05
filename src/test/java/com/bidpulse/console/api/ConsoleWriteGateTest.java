@@ -5,6 +5,7 @@ import com.bidpulse.api.BizException;
 import com.bidpulse.api.dto.AdUpsertRequest;
 import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.console.command.DltReplayAdminService;
+import com.bidpulse.console.command.IdempotencyService;
 import com.bidpulse.console.query.DltQueryService;
 import com.bidpulse.infra.kafka.KafkaLagQueryService;
 import com.bidpulse.job.BudgetReconJob;
@@ -51,6 +52,8 @@ class ConsoleWriteGateTest {
     private KafkaLagQueryService kafkaLagQueryService;
     @Mock
     private KafkaListenerEndpointRegistry registry;
+    @Mock
+    private IdempotencyService idempotencyService;
 
     private BidPulseProperties props;
     private ConsoleAdsController ads;
@@ -64,8 +67,8 @@ class ConsoleWriteGateTest {
         props.getConsole().setAllowWrite(false);
         ads = new ConsoleAdsController(adAdminService, props);
         ops = new ConsoleOpsController(dltQueryService, dltReplayAdminService,
-                dltReplayJob, budgetReconJob, reconReportStore, props);
-        kafka = new ConsoleKafkaController(kafkaLagQueryService, registry, props);
+                dltReplayJob, budgetReconJob, reconReportStore, props, idempotencyService);
+        kafka = new ConsoleKafkaController(kafkaLagQueryService, registry, props, idempotencyService);
         experiments = new ConsoleExperimentsController(props);
     }
 
@@ -82,19 +85,19 @@ class ConsoleWriteGateTest {
     @Test
     @DisplayName("DLT 重放/对账全部 403 且不触达任务或 Kafka")
     void opsWritesForbidden() {
-        assertForbidden(() -> ops.replay(10));
-        assertForbidden(() -> ops.replayOne(0, 0));
-        assertForbidden(ops::runRecon);
+        assertForbidden(() -> ops.replay(10, null));
+        assertForbidden(() -> ops.replayOne(0, 0, null));
+        assertForbidden(() -> ops.runRecon(null));
         verifyNoInteractions(dltQueryService, dltReplayAdminService, dltReplayJob,
-                budgetReconJob, reconReportStore);
+                budgetReconJob, reconReportStore, idempotencyService);
     }
 
     @Test
     @DisplayName("消费组暂停/恢复 403 且不触达监听容器")
     void kafkaWritesForbidden() {
-        assertForbidden(kafka::pause);
-        assertForbidden(kafka::resume);
-        verifyNoInteractions(kafkaLagQueryService, registry);
+        assertForbidden(() -> kafka.pause(null));
+        assertForbidden(() -> kafka.resume(null));
+        verifyNoInteractions(kafkaLagQueryService, registry, idempotencyService);
     }
 
     @Test

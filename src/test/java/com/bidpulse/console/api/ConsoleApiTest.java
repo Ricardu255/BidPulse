@@ -1,6 +1,7 @@
 package com.bidpulse.console.api;
 
 import com.bidpulse.admin.AdAdminService;
+import com.bidpulse.api.BizException;
 import com.bidpulse.api.PageResult;
 import com.bidpulse.api.dto.AdQuery;
 import com.bidpulse.api.dto.AdUpsertRequest;
@@ -12,10 +13,13 @@ import com.bidpulse.console.dto.DltMessageView;
 import com.bidpulse.console.dto.FrequencyView;
 import com.bidpulse.console.dto.OverviewView;
 import com.bidpulse.console.dto.TrendPoint;
+import com.bidpulse.api.dto.BidTrace;
+import com.bidpulse.console.query.ConsoleBidTraceService;
 import com.bidpulse.console.query.ConsoleOverviewService;
 import com.bidpulse.console.query.ConsoleQueryService;
 import com.bidpulse.console.query.DltQueryService;
 import com.bidpulse.console.command.DltReplayAdminService;
+import com.bidpulse.console.command.IdempotencyService;
 import com.bidpulse.entity.Ad;
 import com.bidpulse.infra.persistence.AdMapper;
 import com.bidpulse.job.BudgetReconJob;
@@ -39,6 +43,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -81,6 +87,12 @@ class ConsoleApiTest {
 
     @MockBean
     private ConsoleOverviewService overviewService;
+
+    @MockBean
+    private ConsoleBidTraceService bidTraceService;
+
+    @MockBean
+    private IdempotencyService idempotencyService;
 
     @MockBean
     private AdAdminService adAdminService;
@@ -134,7 +146,7 @@ class ConsoleApiTest {
         result.setPayPrice(new BigDecimal("1.01"));
         result.setCandidateCnt(3);
         result.setMatchCnt(3);
-        when(bidService.bid(any(BidRequest.class))).thenReturn(result);
+        when(bidService.bid(any(BidRequest.class), eq(true))).thenReturn(result);
 
         mockMvc.perform(post("/console-api/v1/bids")
                         .contentType("application/json")
@@ -145,6 +157,67 @@ class ConsoleApiTest {
                 .andExpect(jsonPath("$.data.priceMode").value(1))
                 .andExpect(jsonPath("$.data.payPrice").value(1.01))
                 .andExpect(jsonPath("$.wallMs").exists());
+    }
+
+    @Test
+    @DisplayName("控制台竞价响应携带决策轨迹")
+    void bidReturnsDecisionTrace() throws Exception {
+        String requestId = "0123456789abcdef0123456789abcdef";
+        BidRequest.Result result = new BidRequest.Result();
+        result.setRequestId(requestId);
+        result.setHasAd(true);
+        result.setFallback(false);
+        result.setPriceMode(1);
+        result.setPayPrice(new BigDecimal("1.01"));
+        result.setCandidateCnt(3);
+        result.setMatchCnt(3);
+        result.setTrace(sampleTrace(requestId));
+        when(bidService.bid(any(BidRequest.class), eq(true))).thenReturn(result);
+
+        mockMvc.perform(post("/console-api/v1/bids")
+                        .contentType("application/json")
+                        .content("{\"slotCode\":\"slot-01\",\"region\":\"110000\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.trace.outcome").value("WIN"))
+                .andExpect(jsonPath("$.data.trace.candidates[0].result").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.trace.steps[0].stage").value("检索"));
+    }
+
+    @Test
+    @DisplayName("轨迹接口返回候选裁决与时间线")
+    void bidTraceReturnsTimeline() throws Exception {
+        String requestId = "0123456789abcdef0123456789abcdef";
+        when(bidTraceService.trace(requestId)).thenReturn(sampleTrace(requestId));
+
+        mockMvc.perform(get("/console-api/v1/bids/{requestId}/trace", requestId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requestId").value(requestId))
+                .andExpect(jsonPath("$.data.outcome").value("WIN"))
+                .andExpect(jsonPath("$.data.timings.totalMs").value(21))
+                .andExpect(jsonPath("$.data.candidates[0].adId").value(110));
+    }
+
+    @Test
+    @DisplayName("重复的 Idempotency-Key 返回 409，且不触达重放任务")
+    void duplicateIdempotencyKeyReturns409() throws Exception {
+        doThrow(BizException.conflict("重复请求"))
+                .when(idempotencyService).requireFresh(eq("dlt-replay"), eq("same-key"));
+
+        mockMvc.perform(post("/console-api/v1/dlt/replay")
+                        .param("maxRecords", "10")
+                        .header("Idempotency-Key", "same-key"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(409));
+    }
+
+    private static BidTrace sampleTrace(String requestId) {
+        return new BidTrace(
+                requestId, 1730000000000L, "WIN", null, 3, 3, 110L,
+                new BigDecimal("1.50"), new BigDecimal("1.01"), 1,
+                List.of(new BidTrace.Candidate(110L, new BigDecimal("1.50"),
+                        new BigDecimal("1.01"), "SUCCESS")),
+                List.of(new BidTrace.Step("检索", "命中候选 3 条", 8)),
+                new BidTrace.Timings(8, 12, 21));
     }
 
     @Test

@@ -24,6 +24,43 @@ export interface AdInfo {
   bid: number
 }
 
+export interface TraceCandidate {
+  adId: number
+  bid: number | null
+  price: number | null
+  /** SUCCESS / INSUFFICIENT / FREQ_CAPPED / NEEDS_SEED / REDIS_ERROR */
+  result: string
+}
+
+export interface TraceStep {
+  stage: string
+  detail: string
+  costMs: number
+}
+
+export interface TraceTimings {
+  dbMs: number
+  redisMs: number
+  totalMs: number
+}
+
+export interface BidTrace {
+  requestId: string
+  ts: number
+  /** WIN / FALLBACK / EMPTY */
+  outcome: string
+  fallbackReason: string | null
+  candidateCnt: number
+  matchCnt: number
+  winnerAdId: number | null
+  winBid: number | null
+  payPrice: number | null
+  priceMode: number
+  candidates: TraceCandidate[]
+  steps: TraceStep[]
+  timings: TraceTimings
+}
+
 export interface BidResult {
   requestId: string
   hasAd: boolean
@@ -34,6 +71,8 @@ export interface BidResult {
   topCandidates: AdInfo[]
   priceMode: number
   payPrice: number | null
+  /** 仅控制台竞价返回；外部 /bid 不带此字段 */
+  trace?: BidTrace | null
 }
 
 export interface BudgetView {
@@ -101,6 +140,8 @@ export interface RecentBidView {
   hasAd: boolean
   costMs: number
   bidAt: string
+  /** 是否落有决策轨迹（仅控制台发起的竞价） */
+  hasTrace: boolean
 }
 
 export interface AdView {

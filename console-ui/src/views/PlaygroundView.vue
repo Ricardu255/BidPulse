@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
+import BidTraceTimeline from '@/components/BidTraceTimeline.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
@@ -53,6 +54,7 @@ const savings = computed(() => {
   if (win == null || pay == null) return ''
   return `比出价低 ${money(Number(win) - Number(pay))}`
 })
+const lastTrace = computed(() => last.value?.trace ?? null)
 
 function priceModeLabel(mode: number | null | undefined): string {
   if (mode === 0) return '一价'
@@ -226,6 +228,17 @@ onMounted(() => {
         :description="`兜底广告的广告 ID 为 ${FALLBACK_AD_ID}，不是广告主投放；出价只是配置值，成交价为空，不计费。`"
       />
 
+      <el-divider content-position="left">决策轨迹</el-divider>
+      <BidTraceTimeline v-if="lastTrace" :trace="lastTrace" />
+      <el-alert
+        v-else
+        type="info"
+        :closable="false"
+        show-icon
+        title="本次响应没有携带轨迹：请确认后端已升级，且请求走的是控制台入口。"
+      />
+
+      <el-divider content-position="left">候选出价</el-divider>
       <el-table :data="last?.topCandidates ?? []" stripe size="small">
         <el-table-column prop="adId" label="广告 ID" width="110" />
         <el-table-column prop="title" label="广告标题" min-width="220" />

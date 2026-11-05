@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import PageHeader from '@/components/PageHeader.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import StaleNotice from '@/components/StaleNotice.vue'
+import BidTraceTimeline from '@/components/BidTraceTimeline.vue'
 import OverviewHealthCard from '@/components/overview/OverviewHealthCard.vue'
 import OverviewDistributionCard from '@/components/overview/OverviewDistributionCard.vue'
 import OverviewTrendChart from '@/components/overview/OverviewTrendChart.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getOverview, getRecentBids } from '@/api/console'
-import type { OverviewView, RecentBidView } from '@/api/types'
+import { getBidTrace, getOverview, getRecentBids } from '@/api/console'
+import { ApiError } from '@/api/client'
+import type { BidTrace, OverviewView, RecentBidView } from '@/api/types'
 import { errorText, money } from '@/format'
 import { usePolling } from '@/composables/usePolling'
 import { FALLBACK_AD_ID } from '@/constants'
@@ -20,6 +23,10 @@ const recentAll = ref<RecentBidView[]>([])
 const loading = ref(false)
 const auto = ref(true)
 const recentDrawer = ref(false)
+const traceVisible = ref(false)
+const traceLoading = ref(false)
+const trace = ref<BidTrace | null>(null)
+const traceRequestId = ref('')
 
 const fallbackPercent = computed(() => `${((overview.value?.fallbackRate ?? 0) * 100).toFixed(2)}%`)
 
@@ -50,20 +57,62 @@ async function openRecent(): Promise<void> {
   }
 }
 
-async function refresh(): Promise<void> {
-  loading.value = true
-  try {
-    const [overviewView, recentRows] = await Promise.all([getOverview(), getRecentBids(15)])
-    overview.value = overviewView
-    recent.value = recentRows
-  } catch (e) {
-    notifyError(e)
-  } finally {
-    loading.value = false
+/** 明细异步刷盘（≤200ms），刚发起的竞价可能短暂 404；重试 3 次再放弃 */
+async function loadTraceWithRetry(requestId: string): Promise<BidTrace> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await getBidTrace(requestId)
+    } catch (e) {
+      if (!(e instanceof ApiError) || e.status !== 404 || attempt >= 2) throw e
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
   }
 }
 
-usePolling(refresh, 5000, auto)
+let traceSeq = 0
+async function openTrace(row: RecentBidView): Promise<void> {
+  const mySeq = ++traceSeq
+  traceVisible.value = true
+  traceLoading.value = true
+  trace.value = null
+  traceRequestId.value = row.requestId
+  try {
+    const result = await loadTraceWithRetry(row.requestId)
+    if (mySeq === traceSeq) trace.value = result
+  } catch (e) {
+    // 404 表示明细还没刷出来或该条没有轨迹，交给弹窗空状态说明，不弹错误 toast
+    if (mySeq === traceSeq && (!(e instanceof ApiError) || e.status !== 404)) notifyError(e)
+  } finally {
+    if (mySeq === traceSeq) traceLoading.value = false
+  }
+}
+
+// 轮询失败只标记「陈旧」，保留上一次成功的数据；手动刷新才弹 toast
+const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
+  async ({ isCurrent, scheduled }) => {
+    try {
+      const [overviewView, recentRows] = await Promise.all([getOverview(), getRecentBids(15)])
+      if (!isCurrent()) return
+      overview.value = overviewView
+      recent.value = recentRows
+    } catch (e) {
+      if (isCurrent() && !scheduled) notifyError(e)
+      throw e
+    }
+  },
+  5000,
+  auto,
+)
+
+let manualLoads = 0
+function refresh(): void {
+  manualLoads += 1
+  loading.value = true
+  void refreshData().finally(() => {
+    manualLoads -= 1
+    if (manualLoads === 0) loading.value = false
+  })
+}
 
 onMounted(refresh)
 </script>
@@ -81,6 +130,8 @@ onMounted(refresh)
         </div>
       </template>
     </PageHeader>
+
+    <StaleNotice :stale="stale" :last-updated-at="lastUpdatedAt" />
 
     <div v-if="overview" class="metric-grid six">
       <MetricCard label="今日请求" :value="overview.bidsToday" hint="今日竞价明细记录数" />
@@ -164,6 +215,14 @@ onMounted(refresh)
         <el-table-column label="耗时" width="100" align="right">
           <template #default="{ row }">{{ row.costMs }} ms</template>
         </el-table-column>
+        <el-table-column label="轨迹" width="80">
+          <template #default="{ row }">
+            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
+              查看
+            </el-button>
+            <span v-else class="hint">—</span>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="recent-mobile">
         <div v-for="row in recent.slice(0, 5)" :key="row.requestId" class="recent-mobile-row">
@@ -175,6 +234,9 @@ onMounted(refresh)
             <span>{{ row.bidAt }}</span>
             <strong>{{ money(row.payPrice) }}</strong>
             <span>广告 {{ row.adId }}</span>
+            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
+              轨迹
+            </el-button>
           </div>
         </div>
       </div>
@@ -208,7 +270,29 @@ onMounted(refresh)
         <el-table-column label="耗时" width="90">
           <template #default="{ row }">{{ row.costMs }} ms</template>
         </el-table-column>
+        <el-table-column label="轨迹" width="80">
+          <template #default="{ row }">
+            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
+              查看
+            </el-button>
+            <span v-else class="hint">—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </el-drawer>
+
+    <el-dialog v-model="traceVisible" title="决策轨迹" width="760px" destroy-on-close>
+      <div v-loading="traceLoading" class="trace-dialog-body">
+        <BidTraceTimeline v-if="trace" :trace="trace" />
+        <el-empty
+          v-else-if="!traceLoading"
+          description="轨迹暂不可用：明细异步落库，可能稍后才有"
+          :image-size="60"
+        />
+      </div>
+      <template #footer>
+        <span class="hint mono">{{ traceRequestId }}</span>
+      </template>
+    </el-dialog>
   </div>
 </template>

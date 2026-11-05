@@ -69,4 +69,11 @@ public class BidLog {
 
     /** 竞价时间。M8-3 按此字段做 RANGE 分区 */
     private LocalDateTime bidAt;
+
+    /**
+     * 决策轨迹 JSON（{@code BidTrace} 序列化结果），仅控制台竞价有值。
+     *
+     * <p>明细本身可丢；轨迹同样是可采样数据，不参与对账。
+     */
+    private String traceJson;
 }

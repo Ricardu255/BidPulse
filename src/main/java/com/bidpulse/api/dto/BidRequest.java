@@ -81,6 +81,12 @@ public class BidRequest {
         private Integer priceMode;
         /** 实际成交价（元）。二价下低于胜出者出价，演示时与 winner.bid 对照 */
         private java.math.BigDecimal payPrice;
+        /**
+         * 决策轨迹：仅控制台竞价返回（{@code /console-api/v1/bids}）。
+         * 外部 {@code /bid} 不采集，字段为 null 且不参与 JSON 序列化。
+         */
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        private BidTrace trace;
     }
 
     @Data

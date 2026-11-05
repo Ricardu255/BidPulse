@@ -3,6 +3,7 @@ import FilterBar from '@/components/FilterBar.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AdStatusTag from '@/components/AdStatusTag.vue'
 import MetricCard from '@/components/MetricCard.vue'
+import StaleNotice from '@/components/StaleNotice.vue'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -39,8 +40,6 @@ const frequencyProgressStatus = computed<'success' | 'exception'>(() =>
   frequencyPercent.value >= 100 ? 'exception' : 'success',
 )
 
-let refreshSeq = 0
-
 function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
 }
@@ -49,25 +48,25 @@ function isAdMissing(e: unknown): boolean {
   return e instanceof ApiError && e.status === 404 && /广告不存在/.test(e.message)
 }
 
-async function refresh(force = false): Promise<void> {
-  if (!session.adId) {
-    budget.value = null
-    frequency.value = null
-    notFound.value = false
-    return
-  }
-  if (!force && notFound.value) return
+// 轮询失败只标记「陈旧」，保留上一次成功的数据；手动刷新才弹 toast
+const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
+  async ({ isCurrent, scheduled }) => {
+    if (!session.adId) {
+      budget.value = null
+      frequency.value = null
+      notFound.value = false
+      return
+    }
+    // 广告已确认不存在时，后台轮询不再反复打接口；用户改筛选或手动刷新会重新查询
+    if (scheduled && notFound.value) return
 
-  const adId = session.adId
-  const seq = ++refreshSeq
-  loading.value = true
-  try {
+    const adId = session.adId
     const [budgetResult, frequencyResult] = await Promise.allSettled([
       getBudget(adId),
       getFrequency(adId, session.userId),
     ])
-    // 请求期间用户改了 adId：丢弃旧响应，避免旧广告数据覆盖新广告。
-    if (seq !== refreshSeq || adId !== session.adId) return
+    // 请求期间用户改了 adId：丢弃旧响应，避免旧广告数据覆盖新广告
+    if (!isCurrent() || adId !== session.adId) return
 
     if (budgetResult.status === 'rejected') {
       const e = budgetResult.reason
@@ -77,8 +76,8 @@ async function refresh(force = false): Promise<void> {
         frequency.value = null
         return
       }
-      notifyError(e)
-      return
+      if (!scheduled) notifyError(e)
+      throw e
     }
 
     budget.value = budgetResult.value
@@ -90,9 +89,20 @@ async function refresh(force = false): Promise<void> {
       frequency.value = null
       if (!isAdMissing(frequencyResult.reason)) notifyError(frequencyResult.reason)
     }
-  } finally {
-    if (seq === refreshSeq) loading.value = false
-  }
+  },
+  2000,
+  auto,
+)
+
+let manualLoads = 0
+function refresh(force = false): void {
+  if (force) notFound.value = false
+  manualLoads += 1
+  loading.value = true
+  void refreshData().finally(() => {
+    manualLoads -= 1
+    if (manualLoads === 0) loading.value = false
+  })
 }
 
 function onFilterChange(): void {
@@ -110,8 +120,6 @@ function openAds(): void {
   router.push('/ads')
 }
 
-usePolling(refresh, 2000, auto)
-
 onMounted(refresh)
 </script>
 
@@ -122,6 +130,8 @@ onMounted(refresh)
       description="查某个广告今天还剩多少钱、某个用户今天已经看过几次；只读，不会修改预算。"
       tag="GET /console-api/v1/budget · /frequency"
     />
+
+    <StaleNotice :stale="stale" :last-updated-at="lastUpdatedAt" />
 
     <el-card class="panel" shadow="never">
       <FilterBar>

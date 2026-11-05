@@ -72,6 +72,7 @@ com.bidpulse
 │  └─ GlobalExceptionHandler
 ├─ bid/                 竞价领域
 │  ├─ BidService        检索 → 预算裁决 → 二价 → 兜底 → 事件旁路
+│  ├─ BidTraceBuilder   控制台决策轨迹（候选裁决/兜底原因/耗时），包内可见
 │  ├─ PricingPolicy     纯函数：二价、最小加价、分单位量化
 │  ├─ FallbackAdProvider 三级兜底缓存
 │  └─ TargetingResolver 年龄段/性别等请求参数归一化
@@ -80,8 +81,8 @@ com.bidpulse
 ├─ audit/               审计（写操作 + 安全拒绝）
 ├─ console/             控制台 BFF
 │  ├─ api/              /console-api/v1 controller
-│  ├─ command/          运维写动作（DLT 单条重放等）
-│  ├─ query/            只读聚合（概览、Kafka lag、DLT 浏览）
+│  ├─ command/          运维写动作（DLT 单条重放等）+ IdempotencyService
+│  ├─ query/            只读聚合（概览、Kafka lag、DLT 浏览、决策轨迹回看）
 │  ├─ dto/              控制台响应模型
 │  └─ config/           CORS 等控制台装配
 ├─ event/               Kafka 事件契约（BidEvent）
@@ -123,13 +124,14 @@ console-ui/src
 │  ├─ client.ts          fetch 封装、401 跳登录、错误映射
 │  ├─ console.ts         控制台 REST 调用
 │  ├─ auth.ts            登录调用
-│  ├─ types.ts           响应类型
+│  ├─ idempotency.ts     写操作幂等键生成（crypto.randomUUID + 降级）
+│  ├─ types.ts           响应类型（含 BidTrace）
 │  └─ mocks/             mock 模式的接口数据（按域拆分）
 ├─ auth.ts               token/角色状态（sessionStorage）
 ├─ router.ts             路由 + 登录/角色守卫
 ├─ views/                页面：概览、竞价、广告、预算、运维、数据、实验、审计、登录
-├─ components/           页面内可复用块（ads/ops/overview）
-├─ composables/          usePolling、useAsyncAction、useDirtyForm
+├─ components/           页面内可复用块（ads/ops/overview）+ BidTraceTimeline + StaleNotice
+├─ composables/          usePolling（不重叠/最新优先/陈旧标记）、useAsyncAction、useDirtyForm
 ├─ styles/               base / components / pages 三段式 CSS
 └─ e2e/                  Playwright 端到端
 ```
@@ -155,12 +157,17 @@ console-ui/src
 
 ```text
 前端 → /console-api/v1/** → TokenAuthFilter → controller
-  → query/ 只读聚合（概览、预算、Kafka、DLT、数据）
+  → query/ 只读聚合（概览、预算、Kafka、DLT、数据、决策轨迹）
       → consoleReadJdbcTemplate（bidpulse-console-reader 只读池，默认上限 4）
       → 概览 5 个聚合查询共享一个 REPEATABLE_READ 只读快照事务
   → command/ 运维写动作（重放、对账、暂停消费，走主池）
+      → IdempotencyService：Idempotency-Key → Redis SET NX PX（10 分钟）
   → AuditLogFilter 记录写操作；SecurityConfig 记录 401/403 拒绝
 ```
+
+控制台竞价 `POST /console-api/v1/bids` 走 `BidService.bid(req, true)`：同步返回
+`data.trace`，同时把轨迹序列化进 `bid_log.trace_json`（异步明细管道）。外部
+`POST /bid` 走 `bid(req)`，不构建轨迹。
 
 ### 5.3 异步计费
 
@@ -190,10 +197,12 @@ billing-event / hourly-preagg / freq-antifraud 三个消费组
 | 数据源/只读池 | `config/DataSourceConfig` | 主池 `@Primary`；只读池不注册第二个事务管理器 Bean |
 | 定时任务 | `job/` | `@Scheduled` 与配置项在 `application.yml` |
 | 控制台只读接口 | `console/query` + `console/api` | 走 `consoleReadJdbcTemplate`，避免把聚合写进 controller |
-| 控制台运维写操作 | `console/command` + `console/api` | 需要角色校验与审计 |
+| 控制台运维写操作 | `console/command` + `console/api` | 需要角色校验与审计；新增写接口记得接 `IdempotencyService` |
+| 决策轨迹 | `bid/BidTraceBuilder` + `console/query/ConsoleBidTraceService` | 只允许控制台入口采集；候选封顶 10 条，禁止加用户上下文 |
 | 登录/角色 | `auth/` | 密码从环境变量注入 |
 | 审计 | `audit/` + `sql/all-schema.sql` | 表缺失时只打日志 |
 | 前端页面 | `console-ui/src/views` | 数据请求放 `api/console.ts` |
+| 前端轮询 | `console-ui/src/composables/usePolling.ts` | 用 `isCurrent()` 丢弃过期响应，别在页面里自己 setInterval |
 | 前端可复用块 | `console-ui/src/components` | 不要在这里做路由跳转 |
 | 建表/索引 | `sql/all-schema.sql`（全新库）、`sql/migrations/`（存量库） | baseline 含 `DROP TABLE`，不能用于升级 |
 
@@ -209,7 +218,7 @@ src/test/java/com/bidpulse
 ├─ auth/                   登录、角色矩阵、安全过滤链
 ├─ audit/                  审计过滤
 ├─ config/                 配置绑定/校验、生产密钥守卫、Kafka 重试、时区
-├─ console/                控制台 REST 契约、查询、CORS、只读池与概览快照
+├─ console/                控制台 REST 契约、查询、轨迹回看、幂等键、CORS、只读池与概览快照
 ├─ testsupport/            IntegrationTestGuard、IntegrationDataSourceGuard、@BidPulseIntegrationTest
 ├─ infra/redis/            预算 Lua、冷启动重建、频次
 ├─ infra/kafka/            消费模板错误分类、载荷指纹、计费冲突真库集成测试

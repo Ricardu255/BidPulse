@@ -112,7 +112,8 @@ public class ConsoleOverviewService {
         int cap = Math.max(1, Math.min(limit, 50));
         return jdbc.query(
                 "SELECT request_id, ad_id, win_bid, pay_price, has_ad, cost_ms, "
-                        + "DATE_FORMAT(bid_at, '%Y-%m-%d %H:%i:%s') AS bid_at "
+                        + "DATE_FORMAT(bid_at, '%Y-%m-%d %H:%i:%s') AS bid_at, "
+                        + "trace_json IS NOT NULL AS has_trace "
                         + "FROM bid_log ORDER BY id DESC LIMIT ?",
                 (rs, i) -> new RecentBidView(
                         rs.getString("request_id"),
@@ -121,7 +122,8 @@ public class ConsoleOverviewService {
                         rs.getBigDecimal("pay_price"),
                         rs.getInt("has_ad") == 1,
                         rs.getInt("cost_ms"),
-                        rs.getString("bid_at")),
+                        rs.getString("bid_at"),
+                        rs.getBoolean("has_trace")),
                 cap);
     }
 
