@@ -30,8 +30,26 @@ test('playground runs a bid and shows second price', async ({ page }) => {
   await page.getByPlaceholder('用于实时频次控制').fill(`e2e-${Date.now()}`)
   await page.getByRole('button', { name: '发起竞价' }).click()
   await expect(page.getByText('竞价成功')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('¥1.01')).toBeVisible()
+  // 成交价在结果卡片和决策轨迹里各出现一次，取第一个即可
+  await expect(page.getByText('¥1.01').first()).toBeVisible()
   await expect(page.getByText('二价计费', { exact: false })).toBeVisible()
+})
+
+test('playground shows the decision trace timeline', async ({ page }) => {
+  await page.goto('/#/playground')
+  await page.getByRole('button', { name: '发起竞价' }).click()
+  await expect(page.getByText('竞价成功')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('决策轨迹')).toBeVisible()
+  await expect(page.getByText('候选 4 条 · 匹配 4 条')).toBeVisible()
+  await expect(page.getByText('胜出广告 #110')).toBeVisible()
+})
+
+test('overview opens a bid decision trace', async ({ page }) => {
+  await page.goto('/#/overview')
+  await page.getByRole('button', { name: '查看', exact: true }).first().click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('决策轨迹')).toBeVisible()
+  await expect(dialog.getByText('候选 4 条 · 匹配 4 条')).toBeVisible()
 })
 
 test('budget page loads budget and frequency', async ({ page }) => {
