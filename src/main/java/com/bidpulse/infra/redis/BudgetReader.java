@@ -52,7 +52,7 @@ final class BudgetReader {
             remaining = Math.max(0, toCents(dailyBudget) - spent);
         }
         return new BudgetService.BudgetSnapshot(remaining, spent,
-                ttl == null ? -1L : ttl, budgetRaw != null);
+                ttl == null ? Long.valueOf(-1L) : ttl, budgetRaw != null);
     }
 
     /** 读取某用户当前小时对某广告的频次计数；键不存在时不创建空 Hash。 */
@@ -63,7 +63,7 @@ final class BudgetReader {
         Long count = raw == null ? null : parseCentsOrNull(String.valueOf(raw));
         return new BudgetService.FrequencySnapshot(count,
                 Math.max(1, props.getFrequency().getMaxPerHour()),
-                ttl == null ? -1L : ttl);
+                ttl == null ? Long.valueOf(-1L) : ttl);
     }
 
     /** 查询当前余额，不存在则按广告日预算初始化（惰性播种）。 */

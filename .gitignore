@@ -7,6 +7,7 @@
 !/tools/
 !/console-ui/
 !/docs/
+!/config/
 # .github 必须放行，否则 CI workflow（ci.yml）推不上 GitHub、永不触发
 !/.github/
 

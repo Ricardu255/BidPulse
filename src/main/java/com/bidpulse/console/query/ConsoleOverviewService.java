@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 概览页与最近竞价的只读查询。
@@ -75,9 +74,11 @@ public class ConsoleOverviewService {
         long dayStartEpochMillis = dayStart.atZone(zone).toInstant().toEpochMilli();
         LocalDateTime trendFrom = LocalDateTime.now(zone).minusMinutes(30);
 
-        Snapshot snapshot = Objects.requireNonNull(
-                snapshotTx.execute(status -> loadSnapshot(dayStart, dayStartEpochMillis, trendFrom)),
-                "概览快照事务不应返回 null");
+        Snapshot snapshot = snapshotTx.execute(
+                status -> loadSnapshot(dayStart, dayStartEpochMillis, trendFrom));
+        if (snapshot == null) {
+            throw new IllegalStateException("概览快照事务不应返回 null");
+        }
 
         // Kafka lag / 健康检查放到事务外：AdminClient 最长等 5s，健康检查也可能超时，
         // 让它们参与事务只会延长只读连接占用时间。
@@ -189,10 +190,15 @@ public class ConsoleOverviewService {
         Map<String, String> out = new LinkedHashMap<>();
         try {
             HealthComponent component = healthEndpoint.health();
-            out.put("overall", component.getStatus().getCode());
-            if (component instanceof CompositeHealth composite && composite.getComponents() != null) {
-                composite.getComponents().forEach((name, detail) ->
-                        out.put(name, detail.getStatus().getCode()));
+            if (component == null) {
+                // Actuator 在端点未就绪时可能返回 null；概览降级为 UNKNOWN 而不是抛 NPE。
+                out.put("overall", "UNKNOWN");
+            } else {
+                out.put("overall", component.getStatus().getCode());
+                if (component instanceof CompositeHealth composite && composite.getComponents() != null) {
+                    composite.getComponents().forEach((name, detail) ->
+                            out.put(name, detail.getStatus().getCode()));
+                }
             }
         } catch (Exception e) {
             log.warn("概览查询健康状态失败: {}", e.getMessage());

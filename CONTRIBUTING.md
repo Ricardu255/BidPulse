@@ -50,6 +50,14 @@ BIDPULSE_IT=true mvn verify -Pfull-tests
 不会静默跳过。测试库必须是本机 `*_it` 库、Redis database `1..15`、Kafka 主题以
 `bidpulse_it_` 开头，守卫会二次校验。
 
+`verify` 同时执行两道质量门禁：
+
+- **JaCoCo**：整体行覆盖 ≥68%、分支 ≥18%；核心包 `bid` ≥70%、`infra.redis` ≥75%、
+  `infra.kafka` ≥80%。报告在 `target/site/jacoco/index.html`。
+  阈值按全量测试基线设定，单跑 `mvn test` 不会触发 check。
+- **SpotBugs**（Medium）：排除 Spring 注入/DTO 共享引用的系统性误报与 prod 启动守卫后，
+  其余真实缺陷直接失败。报告在 `target/spotbugsXml.xml`。
+
 ### 前端
 
 ```bash
@@ -141,6 +149,8 @@ admin/ auth/ audit/    管理端、身份、审计
 
 CI 的 `release-gate` 聚合以下检查，分支保护只需勾选这一个：
 
-- 后端：空白检查、密钥扫描、时区校验、`mvn verify -Pfull-tests`、健康检查冒烟；
+- 后端：空白检查、密钥扫描、时区校验、`mvn verify -Pfull-tests`（含 JaCoCo / SpotBugs）、
+  健康检查冒烟；
 - 前端：lint、单测、构建、Playwright mock E2E；
+- 真实链路：Vite → 真实后端 → MySQL / Redis / Kafka 的 3 条 Playwright 冒烟；
 - 任一失败即阻断合并。

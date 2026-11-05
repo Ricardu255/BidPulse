@@ -2,6 +2,7 @@ package com.bidpulse.auth;
 
 import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -9,7 +10,9 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -105,7 +108,7 @@ public class AuthService {
                 return Optional.empty();
             }
             return Optional.of(new AuthPrincipal(payload.sub(), role));
-        } catch (Exception e) {
+        } catch (GeneralSecurityException | IOException | IllegalArgumentException e) {
             return Optional.empty();
         }
     }
@@ -151,12 +154,12 @@ public class AuthService {
             String payload = Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(json.getBytes(StandardCharsets.UTF_8));
             return payload + "." + Base64.getUrlEncoder().withoutPadding().encodeToString(sign(payload));
-        } catch (Exception e) {
+        } catch (GeneralSecurityException | JsonProcessingException e) {
             throw new IllegalStateException("签发登录 token 失败", e);
         }
     }
 
-    private byte[] sign(String payload) throws Exception {
+    private byte[] sign(String payload) throws GeneralSecurityException {
         Mac mac = Mac.getInstance(HMAC_ALGORITHM);
         mac.init(new SecretKeySpec(secret, HMAC_ALGORITHM));
         return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));

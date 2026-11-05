@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs 排除规则：只排除「按本项目设计必然出现」的告警，不掩盖真实缺陷。
+
+  EI_EXPOSE_REP / EI_EXPOSE_REP2：
+    Spring 的构造器注入本来就会保存外部 bean 引用；DTO/record 里的 List/Map
+    也按契约共享给调用方。SpotBugs 无法区分「注入的容器管理对象」与
+    「真正可变的外部状态」，在 Spring 项目里这两类告警是系统性误报。
+
+  ProductionConfigGuard 的 CT_CONSTRUCTOR_THROW：
+    prod 启动守卫故意在构造期抛异常，缺密钥时必须让应用启动失败。
+-->
+<FindBugsFilter>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="com.bidpulse.config.ProductionConfigGuard"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
+</FindBugsFilter>

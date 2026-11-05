@@ -244,6 +244,10 @@ src/test/java/com/bidpulse
 | 迁移约定 | `quality/MigrationConventionTest` | 文件名不合规、版本重复、漏写 `schema_migration`、baseline 种子/README 版本表漂移、破坏性 SQL |
 | 源码卫生 | `quality/SourceHygieneTest` | 生产代码出现 `System.out/err`、`printStackTrace` |
 | 构建环境 | `maven-enforcer-plugin` | JDK < 17、Maven < 3.8、pom 重复依赖声明 |
+| 覆盖率 | `jacoco-maven-plugin` | 整体行/分支覆盖、核心包行覆盖跌破基线 |
+| 静态缺陷 | `spotbugs-maven-plugin` | 空指针、资源泄漏、并发误用等 Medium 及以上真实缺陷 |
+| 依赖升级 | `.github/dependabot.yml` | Maven / npm / GitHub Actions 依赖长期漂移 |
+| 真实链路 | CI `console-e2e-live` | 登录、Vite 代理、鉴权、竞价链路与种子数据串不起来 |
 | 换行策略 | `.gitattributes` | Windows `core.autocrlf` 造成的整文件 CRLF 差异 |
 
 新增规则前先确保现有代码满足；不要让规则长期 `@Disabled`。

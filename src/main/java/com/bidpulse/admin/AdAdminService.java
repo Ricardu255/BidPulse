@@ -70,7 +70,7 @@ public class AdAdminService {
         ad.setCategoryCode(req.getCategoryCode());
         ad.setBid(req.getBid());
         ad.setDailyBudget(req.getDailyBudget());
-        ad.setStatus(req.getStatus() == null ? STATUS_ACTIVE : req.getStatus());
+        ad.setStatus(req.getStatus() == null ? Integer.valueOf(STATUS_ACTIVE) : req.getStatus());
 
         adMapper.insertAd(ad);                                  // 自增主键回填到 ad.id
         adMapper.batchInsertTargets(ad.getId(), targets);

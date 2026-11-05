@@ -1,0 +1,80 @@
+version: 2
+
+# 依赖供应链自动化：每周一组 PR，按生态分组，避免一次性刷出几十个单依赖 PR。
+# 主版本升级不自动忽略——由人工在 PR 里看 release notes 决定；分组只影响合并体验。
+updates:
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+    groups:
+      spring:
+        patterns:
+          - "org.springframework*"
+          - "io.micrometer*"
+      test:
+        patterns:
+          - "org.junit*"
+          - "org.mockito*"
+          - "org.assertj*"
+          - "com.tngtech.archunit*"
+      build-plugins:
+        patterns:
+          - "org.apache.maven.plugins:*"
+          - "org.jacoco:*"
+          - "com.github.spotbugs:*"
+
+  - package-ecosystem: npm
+    directory: "/console-ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+    groups:
+      vue:
+        patterns:
+          - "vue"
+          - "vue-router"
+          - "@vue/*"
+          - "element-plus"
+      frontend-tooling:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "vitest"
+          - "typescript"
+          - "typescript-eslint"
+          - "eslint"
+          - "eslint-plugin-vue"
+          - "@playwright/test"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"

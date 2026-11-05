@@ -218,8 +218,6 @@ public class BidService {
         // ---------------------------------------------------------
         Ad winner = null;
         BigDecimal payPrice = null;
-        Long adId = null;
-        Integer advertiserId = null;
         // 1 = 二价（有可支付竞争者参与定价）/ 0 = 一价（没有可支付竞争者，按自身出价成交）
         int priceMode = 1;
 
@@ -355,8 +353,6 @@ public class BidService {
             if (result == BudgetService.DeductResult.SUCCESS) {
                 winner = candidate;
                 payPrice = price;
-                adId = candidate.getId();
-                advertiserId = candidate.getAdvertiserId();
                 priceMode = secondPrice.competitive() ? 1 : 0;
                 break;
             }

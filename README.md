@@ -609,10 +609,11 @@ BIDPULSE_JDBC_URL='jdbc:mysql://127.0.0.1:3306/bidpulse_it?useSSL=false&allowPub
 BIDPULSE_REDIS_DATABASE=1 \
 BIDPULSE_KAFKA_TOPIC=bidpulse_it_bid_event \
 BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
-mvn test -Pfull-tests
+mvn verify -Pfull-tests
 ```
 
-加上 162 个纯单测，全量为 206 个用例。
+加上 162 个纯单测，全量为 206 个用例。`verify` 还会执行 JaCoCo 覆盖率门禁与
+SpotBugs 静态扫描（阈值与排除规则见 `pom.xml` / `config/spotbugs-exclude.xml`）。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。
@@ -625,9 +626,14 @@ mvn test -Pfull-tests
 
 - **最小权限**：`permissions: contents: read`；同一分支的新推送自动取消旧构建；所有 job 有 `timeout-minutes`。
 - **供应链**：`actions/checkout`、`setup-java`、`setup-node`、`upload-artifact` 全部固定到 commit SHA。
-- **后端**：空白字符检查 → `tools/check-secrets.sh` 密钥扫描 → `tools/init-it-db.sh` 初始化 `bidpulse_it` 并跑迁移 → 校验 `TZ=Asia/Shanghai` → `mvn -B -ntp verify -Pfull-tests`（全量测试 + 打包）→ 上传 surefire 报告 → 启动 jar 做 `/actuator/health` 冒烟。
+- **后端**：空白字符检查 → `tools/check-secrets.sh` 密钥扫描 → `tools/init-it-db.sh` 初始化 `bidpulse_it` 并跑迁移 → 校验 `TZ=Asia/Shanghai` → `mvn -B -ntp verify -Pfull-tests`（全量测试 + JaCoCo 门禁 + SpotBugs + 打包）→ 上传 surefire / JaCoCo / SpotBugs 报告 → 启动 jar 做 `/actuator/health` 冒烟。
 - **前端**：`npm ci && npm run lint && npm run build && npm test && npm run test:e2e`，失败时上传 Playwright trace。
-- **单一门禁**：`release-gate` job 依赖 backend + console-ui，分支保护只需勾选这一个 check。
+- **真实链路冒烟**：独立的 `console-e2e-live` job 起 MySQL / Redis / Kafka + 演示种子库 + 真实后端 + Vite，跑概览、竞价、审计 3 条 Playwright 用例，验证登录、代理、鉴权与竞价链路能串起来。
+- **单一门禁**：`release-gate` job 依赖 backend + console-ui + console-e2e-live，分支保护只需勾选这一个 check。
+
+**质量度量基线（2026-11-05，全量测试）**：整体行覆盖 70.8%、分支 20.8%；
+核心包 `bid` 73.9%、`infra.redis` 81.3%、`infra.kafka` 86.4%。门禁取略低于基线的值，
+防止正常波动误伤，同时挡住明显退化。依赖升级由 `.github/dependabot.yml` 每周分组提 PR。
 
 ### 前端测试
 
