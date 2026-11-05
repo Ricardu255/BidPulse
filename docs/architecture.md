@@ -30,9 +30,10 @@ bidpulse-engine/
 │  └─ test/java/com/bidpulse   单元测试 + 集成测试
 ├─ console-ui/              独立前端工程（Vue 3 + Vite + Element Plus）
 ├─ sql/
-│  ├─ all-schema.sql         唯一权威 DDL（含 audit_log）
+│  ├─ all-schema.sql         全新库 baseline（8 业务表 + schema_migration）
+│  ├─ migrations/            存量库 append-only 迁移（见 README）
 │  └─ seed-demo.sql          轻量演示数据
-├─ tools/                    造数、候选检索基准、兜底率压测脚本
+├─ tools/                    造数、基准/压测、init-it-db.sh、check-secrets.sh
 ├─ data/                     本地生成的数据（gitignored，不入库）
 ├─ docs/                     文档
 │  ├─ README.md              文档导航
@@ -40,7 +41,7 @@ bidpulse-engine/
 │  ├─ 重构计划书.md          P0/P1/P2 记录与取舍
 │  ├─ images/                README 截图
 │  └─ local/                 本地深度文档（gitignored，不随仓库分发）
-└─ .github/workflows/ci.yml  CI：后端全量 + 前端 lint/build/test/E2E
+└─ .github/workflows/ci.yml  CI：密钥扫描 + 后端全量 + 冒烟 + 前端 lint/build/test/E2E + release-gate
 ```
 
 ### 目录职责边界
@@ -186,7 +187,7 @@ billing-event / hourly-preagg / freq-antifraud 三个消费组
 | 审计 | `audit/` + `sql/all-schema.sql` | 表缺失时只打日志 |
 | 前端页面 | `console-ui/src/views` | 数据请求放 `api/console.ts` |
 | 前端可复用块 | `console-ui/src/components` | 不要在这里做路由跳转 |
-| 建表/索引 | `sql/all-schema.sql` | 唯一权威 DDL |
+| 建表/索引 | `sql/all-schema.sql`（全新库）、`sql/migrations/`（存量库） | baseline 含 `DROP TABLE`，不能用于升级 |
 
 ---
 
@@ -199,14 +200,17 @@ src/test/java/com/bidpulse
 ├─ admin/                  AdAdminService、事务回滚/提交
 ├─ auth/                   登录、角色矩阵、安全过滤链
 ├─ audit/                  审计过滤
+├─ config/                 配置绑定/校验、生产密钥守卫、Kafka 重试、时区
 ├─ console/                控制台 REST 契约、查询、CORS
+├─ testsupport/            IntegrationTestGuard、IntegrationDataSourceGuard、@BidPulseIntegrationTest
 ├─ infra/redis/            预算 Lua、冷启动重建、频次
 ├─ infra/kafka/            消费模板错误分类
 └─ job/                    预算对账、DLT 重放
 ```
 
-- 默认 `mvn test` 只跑无中间件用例；
-- `mvn test -Pfull-tests` 跑全量（含 `@Tag("integration")`）；
+- 默认 `mvn test` 只跑无中间件用例（`@Tag("integration")` 被 surefire 排除）；
+- 集成测试统一用 `@BidPulseIntegrationTest`：必须 `BIDPULSE_IT=true`，且 JDBC 指向 `*_it`、Redis 用 `1..15`、Kafka 主题以 `bidpulse_it_` 开头；`-Pfull-tests` 下缺少开关会直接失败；
+- `mvn test -Pfull-tests` 跑全量；测试库用 `tools/init-it-db.sh` 初始化；
 - 前端：`npm run lint`、`npm test`、`npm run test:e2e`；
 - 真实后端 E2E 需要 `E2E_BASE_URL` + `E2E_USERNAME` / `E2E_PASSWORD`。
 
@@ -236,5 +240,6 @@ src/test/java/com/bidpulse
 | Kafka | 1 Broker，RF=1 | ≥3 Broker，RF=3，`min.insync.replicas=2`，`acks=all` |
 | Redis | 无 AOF/RDB | AOF everysec / RDB + 主从/Sentinel；Cluster 需 hash tag |
 | 鉴权 | 本地账号 + Bearer token | 企业 SSO/MFA、登录限流、token 撤销、审计保留策略 |
+| 配置/密钥 | 环境变量注入；`@Validated` 启动校验；`prod` 缺密钥拒绝启动 | 接入 Vault/KMS/云 Secret Manager，密钥轮换与最小权限 |
 
 **面试口径**：应用层的一致性机制（Lua、幂等、DLT、对账）与基础设施高可用是两层问题；当前项目只证明前者。不要把 demo 说成“分布式高可用”。

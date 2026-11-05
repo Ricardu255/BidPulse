@@ -3,6 +3,7 @@ package com.bidpulse.console.command;
 import com.bidpulse.api.BizException;
 import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.job.DltReplayJob;
+import com.bidpulse.testsupport.BidPulseIntegrationTest;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -11,7 +12,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * 越界 offset 返回 404、负参数返回 400。
  */
 @SpringBootTest
-@Tag("integration")
+@BidPulseIntegrationTest
 class DltReplayAdminServiceTest {
 
     @Autowired

@@ -1,4 +1,7 @@
 server:
+  # 默认只绑定回环地址：控制台/管理端不应在开发机以外的网卡上裸奔。
+  # 容器或远程演示时显式设置 BIDPULSE_SERVER_ADDRESS=0.0.0.0。
+  address: ${BIDPULSE_SERVER_ADDRESS:127.0.0.1}
   # 8080。若被占用可临时改端口，演示手册里的 curl 命令也要同步改
   port: 8080
   tomcat:
@@ -21,8 +24,8 @@ spring:
       thread-name-prefix: bidpulse-sched-
 
   datasource:
-    # 默认空密码对应 docker-compose.yml 的 MYSQL_ALLOW_EMPTY_PASSWORD；
-    # 本机 MySQL 有密码时用环境变量覆盖（如 MYSQL_PASSWORD=xxx），不把密码写进仓库。
+    # 连接信息全部可由环境变量覆盖；默认值对应 docker-compose.yml 的本地 demo。
+    # 集成测试必须把 BIDPULSE_JDBC_URL 指向独立的 *_it 库（见 README「测试与 CI」）。
     #
     # socketTimeout=3000：网络层保险丝。MySQL 驱动默认 0（无限等），一旦网络丢包/连接
     #   卡死，客户端会一直挂在 read 上——此时 MAX_EXECUTION_TIME 帮不了（SQL 没到服务端），
@@ -30,9 +33,10 @@ spring:
     #   语义是「两次网络读之间的静默上限」，对非流式查询等同于语句总时长上限。
     #   取 3000 与 hikari.connection-timeout 对齐；比它更小的值会误伤后台报表/批量写。
     # connectTimeout=3000：建连阶段的 TCP 超时（默认 0 时，对端丢包会等到系统默认 20s+）。
-    url: jdbc:mysql://127.0.0.1:3306/bidpulse?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&socketTimeout=3000&connectTimeout=3000
-    username: root
-    password: ${MYSQL_PASSWORD:}
+    url: "${BIDPULSE_JDBC_URL:jdbc:mysql://127.0.0.1:3306/bidpulse?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true&socketTimeout=3000&connectTimeout=3000}"
+    username: ${BIDPULSE_DB_USERNAME:root}
+    # BIDPULSE_DB_PASSWORD 优先；MYSQL_PASSWORD 保留给旧文档/旧脚本。
+    password: "${BIDPULSE_DB_PASSWORD:${MYSQL_PASSWORD:}}"
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       pool-name: bidpulseHikari
@@ -45,9 +49,10 @@ spring:
 
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      database: 0
+      host: ${BIDPULSE_REDIS_HOST:127.0.0.1}
+      port: ${BIDPULSE_REDIS_PORT:6379}
+      # 集成测试必须使用非 0 的独立 database index，避免清空/污染 demo 的预算与频次 key。
+      database: ${BIDPULSE_REDIS_DATABASE:0}
       # 预算扣减必须快，连接池适当放大
       lettuce:
         pool:
@@ -58,7 +63,7 @@ spring:
       timeout: 200ms
 
   kafka:
-    bootstrap-servers: 127.0.0.1:9092
+    bootstrap-servers: ${BIDPULSE_KAFKA_BOOTSTRAP:127.0.0.1:9092}
     producer:
       # M6 启用。acks=all 配合幂等生产者，防止事件丢失与重复
       acks: all
@@ -109,7 +114,9 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      # 匿名探针只返回 status；DB/Redis/Kafka 详细组件仅 ADMIN 可见。
+      # 本地排障可设 BIDPULSE_HEALTH_DETAILS=always，生产保持 when-authorized。
+      show-details: ${BIDPULSE_HEALTH_DETAILS:when-authorized}
   metrics:
     tags:
       application: bidpulse
@@ -180,9 +187,11 @@ bidpulse:
     # 用于产出「写吞吐由 A 提升至 B」的 A 值。正常压测与演示必须保持 false。
     sync-insert: false
   kafka:
-    topic: bid_event
+    # 集成测试用独立的 bidpulse_it_* 前缀，避免消费 demo/生产主题；
+    # 守卫见 IntegrationTestGuard。
+    topic: ${BIDPULSE_KAFKA_TOPIC:bid_event}
     # 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig）
-    dlt-topic: bid_event.DLT
+    dlt-topic: ${BIDPULSE_KAFKA_DLT_TOPIC:bid_event.DLT}
     partitions: 3
     # 消费端指数退避：1s → 2s → 4s → 8s → 16s（总窗口约 31s）。
     # 把瞬时 DB 抖动吸收在进入 DLT 之前；只有持续故障才落 DLT。
@@ -255,7 +264,8 @@ bidpulse:
   auth:
     # 演示登录：密码只从环境变量注入，不写入仓库。
     # 未配置密码时启动会生成一次性随机密码并打到日志，仅用于本地演示。
-    # 生产至少设置 BIDPULSE_AUTH_SECRET + BIDPULSE_ADMIN_PASSWORD（以及需要的 operator/viewer）。
+    # 生产必须设置 BIDPULSE_AUTH_SECRET、BIDPULSE_DB_PASSWORD，以及这里配置的每个账号的密码；
+    # prod profile 下 ProductionConfigGuard 会在启动时校验，缺失直接失败。
     token-ttl-seconds: 28800
     secret: ${BIDPULSE_AUTH_SECRET:}
     users:

@@ -1,8 +1,17 @@
 package com.bidpulse.config;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Component;
+import org.springframework.validation.annotation.Validated;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -24,32 +33,61 @@ import java.util.Map;
  */
 @Data
 @Component
+@Validated
 @ConfigurationProperties(prefix = "bidpulse")
 public class BidPulseProperties {
 
     /** 二价最小加价（元） */
+    @DecimalMin(value = "0.0001", message = "bidpulse.min-increment 必须大于 0")
     private BigDecimal minIncrement = new BigDecimal("0.01");
 
+    @Valid
     private Timeout timeout = new Timeout();
+    @Valid
     private Bid bid = new Bid();
+    @Valid
     private CircuitBreakerSettings circuitBreaker = new CircuitBreakerSettings();
+    @Valid
     private Fallback fallback = new Fallback();
+    @Valid
     private Detail detail = new Detail();
+    @Valid
     private Kafka kafka = new Kafka();
+    @Valid
     private Budget budget = new Budget();
+    @Valid
     private Frequency frequency = new Frequency();
+    @Valid
     private Console console = new Console();
+    @Valid
     private Auth auth = new Auth();
+
+    /** Spring cron（6 段）；非法值应在启动时失败，而不是等到第一次调度才报错。 */
+    static boolean isValidCron(String cron) {
+        if (cron == null || cron.isBlank()) {
+            return false;
+        }
+        try {
+            CronExpression.parse(cron);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 
     @Data
     public static class Timeout {
         /** 整条链路总超时预算（ms） */
+        @Min(value = 50, message = "bidpulse.timeout.total-ms 必须在 50~5000 之间")
+        @Max(value = 5000, message = "bidpulse.timeout.total-ms 必须在 50~5000 之间")
         private long totalMs = 1000;
     }
 
     @Data
     public static class Bid {
         /** 单次竞价的候选上限（SQL LIMIT），同时决定预算预热规模 */
+        @Min(value = 1, message = "bidpulse.bid.candidate-limit 必须在 1~500 之间")
+        @Max(value = 500, message = "bidpulse.bid.candidate-limit 必须在 1~500 之间")
         private int candidateLimit = 50;
     }
 
@@ -63,21 +101,41 @@ public class BidPulseProperties {
     @Data
     public static class CircuitBreakerSettings {
         /** sentinel = 慢调用比例熔断；local = 自写连续失败计数（对照基线） */
+        @Pattern(regexp = "sentinel|local", message = "bidpulse.circuit-breaker.impl 只能是 sentinel 或 local")
         private String impl = "sentinel";
         /** 熔断持续时长（ms）；Sentinel 只接受秒，装载时换算 */
+        @Min(value = 1, message = "bidpulse.circuit-breaker.cooldown-ms 必须大于 0")
         private long cooldownMs = 5000;
         /** local 实现：连续失败多少次打开 */
+        @Min(value = 1, message = "bidpulse.circuit-breaker.failure-threshold 必须大于 0")
         private int failureThreshold = 5;
         /** Sentinel：慢调用比例阈值 */
         private double slowRatio = 0.5;
         /** Sentinel：统计窗口内最小请求数 */
+        @Min(value = 1, message = "bidpulse.circuit-breaker.min-request-amount 必须大于 0")
         private int minRequestAmount = 5;
         /** Sentinel：统计窗口（ms） */
+        @Min(value = 100, message = "bidpulse.circuit-breaker.stat-interval-ms 不能小于 100")
         private int statIntervalMs = 1000;
         /** DB 候选检索的慢调用判定阈值（ms） */
         private double dbSlowRtMs = 800;
         /** Redis 预算扣减的慢调用判定阈值（ms） */
         private double redisSlowRtMs = 100;
+
+        @AssertTrue(message = "bidpulse.circuit-breaker.slow-ratio 必须在 (0, 1] 之间")
+        public boolean isSlowRatioValid() {
+            return slowRatio > 0 && slowRatio <= 1;
+        }
+
+        @AssertTrue(message = "bidpulse.circuit-breaker.db-slow-rt-ms 必须大于 0")
+        public boolean isDbSlowRtMsValid() {
+            return dbSlowRtMs > 0;
+        }
+
+        @AssertTrue(message = "bidpulse.circuit-breaker.redis-slow-rt-ms 必须大于 0")
+        public boolean isRedisSlowRtMsValid() {
+            return redisSlowRtMs > 0;
+        }
     }
 
     @Data
@@ -87,8 +145,10 @@ public class BidPulseProperties {
         /** 强制兜底：复现「依赖全面故障」 */
         private volatile boolean force = false;
         /** 兜底广告本地缓存时长（ms）：正常时最多这么久访问一次 Redis */
+        @Min(value = 0, message = "bidpulse.fallback.cache-ttl-ms 不能为负数")
         private long cacheTtlMs = 5000;
         /** Redis 读取失败后的退避时长（ms）：期间直接使用本地缓存 */
+        @Min(value = 0, message = "bidpulse.fallback.retry-backoff-ms 不能为负数")
         private long retryBackoffMs = 30000;
     }
 
@@ -100,63 +160,114 @@ public class BidPulseProperties {
 
     @Data
     public static class Kafka {
+        @NotBlank(message = "bidpulse.kafka.topic 不能为空")
+        @Pattern(regexp = "[A-Za-z0-9._-]+", message = "bidpulse.kafka.topic 只能包含字母、数字、点、下划线和连字符")
         private String topic = "bid_event";
         /** 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig） */
+        @NotBlank(message = "bidpulse.kafka.dlt-topic 不能为空")
+        @Pattern(regexp = "[A-Za-z0-9._-]+", message = "bidpulse.kafka.dlt-topic 只能包含字母、数字、点、下划线和连字符")
         private String dltTopic = "bid_event.DLT";
+        @Min(value = 1, message = "bidpulse.kafka.partitions 必须在 1~100 之间")
+        @Max(value = 100, message = "bidpulse.kafka.partitions 必须在 1~100 之间")
         private int partitions = 3;
 
         // ---- 消费端重试：指数退避，尽量在进入 DLT 前吸收瞬时 DB 抖动 ----
         /** 首次重试间隔（ms） */
+        @Min(value = 0, message = "bidpulse.kafka.retry-initial-ms 不能为负数")
         private long retryInitialMs = 1000;
         /** 退避倍数 */
         private double retryMultiplier = 2.0;
         /** 单次重试间隔上限（ms） */
+        @Min(value = 0, message = "bidpulse.kafka.retry-max-ms 不能为负数")
         private long retryMaxMs = 16000;
         /** 最大重试次数；默认 1s→2s→4s→8s→16s，总窗口约 31s */
+        @Min(value = 0, message = "bidpulse.kafka.retry-max-attempts 不能为负数")
+        @Max(value = 100, message = "bidpulse.kafka.retry-max-attempts 不能超过 100")
         private int retryMaxAttempts = 5;
 
         // ---- DLT 重放：把重试耗尽的事件延迟重新投回主主题 ----
         /** 是否启用 DLT 重放任务 */
         private boolean dltReplayEnabled = true;
         /** 重放任务 cron，默认每 5 分钟 */
+        @NotBlank(message = "bidpulse.kafka.dlt-replay-cron 不能为空")
         private String dltReplayCron = "0 */5 * * * ?";
         /** 单次最多处理的消息数，避免一次调度占用过久 */
+        @Min(value = 1, message = "bidpulse.kafka.dlt-replay-max-records 必须大于 0")
         private int dltReplayMaxRecords = 1000;
         /** 单次调度最长运行时长（ms） */
+        @Min(value = 1, message = "bidpulse.kafka.dlt-replay-max-duration-ms 必须大于 0")
         private long dltReplayMaxDurationMs = 10000;
         /** 同一事件最多重放次数；超过后留在 DLT 等待人工处理 */
+        @Min(value = 0, message = "bidpulse.kafka.dlt-replay-max-attempts 不能为负数")
         private int dltReplayMaxAttempts = 3;
         /** 重放投递主主题的同步等待超时（ms）；超时则不提交 DLT 位点，下次重试 */
+        @Min(value = 1, message = "bidpulse.kafka.dlt-replay-send-timeout-ms 必须大于 0")
         private long dltReplaySendTimeoutMs = 5000;
         /** processed_event 保留天数：必须不短于 Kafka 消息保留期，否则重放时去重失效 */
+        @Min(value = 1, message = "bidpulse.kafka.processed-event-retention-days 必须大于 0")
         private int processedEventRetentionDays = 8;
         /** 单次清理最多删除行数，避免长事务与长时间锁表 */
+        @Min(value = 1, message = "bidpulse.kafka.processed-event-cleanup-batch 必须大于 0")
         private int processedEventCleanupBatch = 10000;
         /** 单次调度最多删除的行数上限，避免维护窗口被一次清理占满 */
+        @Min(value = 1, message = "bidpulse.kafka.processed-event-cleanup-max-per-run 必须大于 0")
         private int processedEventCleanupMaxPerRun = 1000000;
         /** 去重表清理任务 cron */
+        @NotBlank(message = "bidpulse.kafka.processed-event-cleanup-cron 不能为空")
         private String processedEventCleanupCron = "0 30 2 * * ?";
+
+        @AssertTrue(message = "bidpulse.kafka.retry-multiplier 必须大于等于 1")
+        public boolean isRetryMultiplierValid() {
+            return retryMultiplier >= 1;
+        }
+
+        @AssertTrue(message = "bidpulse.kafka.dlt-replay-cron 不是合法的 Spring cron")
+        public boolean isDltReplayCronValid() {
+            return isValidCron(dltReplayCron);
+        }
+
+        @AssertTrue(message = "bidpulse.kafka.processed-event-cleanup-cron 不是合法的 Spring cron")
+        public boolean isProcessedEventCleanupCronValid() {
+            return isValidCron(processedEventCleanupCron);
+        }
     }
 
     @Data
     public static class Budget {
         /** 播种 key 的 TTL（秒） */
+        @Min(value = 1, message = "bidpulse.budget.key-ttl-seconds 必须大于 0")
         private long keyTtlSeconds = 172800;
+        @Valid
         private Cleanup cleanup = new Cleanup();
+        @Valid
         private Reset reset = new Reset();
+        @Valid
         private Recon recon = new Recon();
 
         @Data
         public static class Cleanup {
             /** 保留「今天」往前共 N 天的日期分桶 */
+            @Min(value = 1, message = "bidpulse.budget.cleanup.retention-days 必须大于 0")
             private int retentionDays = 2;
+            @NotBlank(message = "bidpulse.budget.cleanup.cron 不能为空")
             private String cron = "0 0 1 * * ?";
+
+            @AssertTrue(message = "bidpulse.budget.cleanup.cron 不是合法的 Spring cron")
+            public boolean isCronValid() {
+                return isValidCron(cron);
+            }
         }
 
         @Data
         public static class Reset {
             /** 日预算复位（status 3 -> 1）的触发时间 */
+            @NotBlank(message = "bidpulse.budget.reset.cron 不能为空")
             private String cron = "0 5 0 * * ?";
+
+            @AssertTrue(message = "bidpulse.budget.reset.cron 不是合法的 Spring cron")
+            public boolean isCronValid() {
+                return isValidCron(cron);
+            }
         }
 
         @Data
@@ -164,11 +275,19 @@ public class BidPulseProperties {
             /** 是否启用预算对账任务 */
             private boolean enabled = true;
             /** 对账 cron，默认每小时第 15 分钟 */
+            @NotBlank(message = "bidpulse.budget.recon.cron 不能为空")
             private String cron = "0 15 * * * ?";
             /** 允许的误差（分）：Redis 与 DB 账单差值不超过该值视为正常（事件在途） */
+            @Min(value = 0, message = "bidpulse.budget.recon.tolerance-cents 不能为负数")
             private long toleranceCents = 1;
             /** 单批处理的广告数，控制 IN 查询与 Redis 读取规模 */
+            @Min(value = 1, message = "bidpulse.budget.recon.batch-size 必须大于 0")
             private int batchSize = 500;
+
+            @AssertTrue(message = "bidpulse.budget.recon.cron 不是合法的 Spring cron")
+            public boolean isCronValid() {
+                return isValidCron(cron);
+            }
         }
     }
 
@@ -185,6 +304,7 @@ public class BidPulseProperties {
     public static class Frequency {
         private volatile boolean enabled = true;
         /** 同一用户对同一广告每小时的最大成交次数 */
+        @Min(value = 1, message = "bidpulse.frequency.max-per-hour 必须大于 0")
         private volatile int maxPerHour = 3;
         /**
          * 频次 key 的 TTL（秒），默认 2 小时。
@@ -192,6 +312,7 @@ public class BidPulseProperties {
          * <p>固定窗口键按小时命名，旧窗口不会再被读取；TTL 只负责回收。
          * 取 2 小时给跨小时边界留出冗余，避免窗口末尾写入的键过早消失。
          */
+        @Min(value = 1, message = "bidpulse.frequency.key-ttl-seconds 必须大于 0")
         private long keyTtlSeconds = 7200;
     }
 
@@ -219,10 +340,12 @@ public class BidPulseProperties {
     @Data
     public static class Auth {
         /** Bearer token 有效期（秒），默认 8 小时 */
+        @Min(value = 60, message = "bidpulse.auth.token-ttl-seconds 不能小于 60")
         private long tokenTtlSeconds = 28800;
         /** HMAC-SHA256 签名密钥；为空时启动生成随机密钥，重启后旧 token 失效 */
         private String secret = "";
         /** 用户名 -> 账号配置 */
+        @Valid
         private Map<String, AuthUser> users = new LinkedHashMap<>();
     }
 
@@ -231,6 +354,7 @@ public class BidPulseProperties {
         /** 明文密码只从环境变量/测试配置注入，启动后立即编码，不持久化 */
         private String password = "";
         /** VIEWER / OPERATOR / ADMIN */
+        @Pattern(regexp = "VIEWER|OPERATOR|ADMIN", message = "bidpulse.auth.users.*.role 只能是 VIEWER/OPERATOR/ADMIN")
         private String role = "VIEWER";
     }
 }

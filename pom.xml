@@ -28,6 +28,13 @@
         mvn test -Pfull-tests
     -->
     <surefire.excludedGroups>integration</surefire.excludedGroups>
+    <!--
+      传给测试 JVM 的「全量模式」标记。IntegrationTestGuard 用它区分两种情况：
+        · 普通 mvn test：tag 已排除，守卫根本不会执行；
+        · mvn test -Pfull-tests 但忘了设置 BIDPULSE_IT=true：直接失败，
+          而不是静默跳过所有集成测试、制造「全绿」假象。
+    -->
+    <bidpulse.full-tests>false</bidpulse.full-tests>
   </properties>
 
   <dependencies>
@@ -134,6 +141,10 @@
           <!-- 测试 JVM 固定东八区：预算日 key/频次小时 key/概览今日窗口都依赖本地时区，
                不能让开发者本机与 CI 的时区差异影响断言。 -->
           <argLine>-Duser.timezone=Asia/Shanghai</argLine>
+          <systemPropertyVariables>
+            <!-- 让 IntegrationTestGuard 知道当前是否显式要求跑全量 -->
+            <bidpulse.full-tests>${bidpulse.full-tests}</bidpulse.full-tests>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
 
@@ -165,6 +176,7 @@
       <properties>
         <!-- "none" 不是任何测试的 tag，等价于不排除任何分组 -->
         <surefire.excludedGroups>none</surefire.excludedGroups>
+        <bidpulse.full-tests>true</bidpulse.full-tests>
       </properties>
     </profile>
   </profiles>

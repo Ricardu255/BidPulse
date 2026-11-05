@@ -7,21 +7,47 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 最小权限：CI 只需要读仓库。即使某个第三方 action 被投毒，也拿不到写权限。
+permissions:
+  contents: read
+
+# 同一分支连续推送时取消旧构建：PR 只看最新一次结果，也节省 runner 时间。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  backend:
+    name: backend
     runs-on: ubuntu-latest          # 自带 Docker，支持 services
+    timeout-minutes: 30
     # 与生产/本机一致：预算日 key、频次小时 key、概览今日窗口都按东八区切分。
     # 同时让所有集成测试在非 UTC 的时区下跑一遍，避免只在开发者本机通过。
+    #
+    # 集成测试全部指向独立资源：
+    #   · MySQL 库名 bidpulse_it（IntegrationTestGuard + 实际连接元数据双重校验）
+    #   · Redis database 1（不碰 demo 的 0 号库）
+    #   · Kafka 主题 bidpulse_it_*（不消费 demo/生产主题）
     env:
       TZ: Asia/Shanghai
+      BIDPULSE_IT: "true"
+      BIDPULSE_JDBC_URL: "jdbc:mysql://127.0.0.1:3306/bidpulse_it?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true"
+      BIDPULSE_DB_USERNAME: root
+      BIDPULSE_DB_PASSWORD: ""
+      BIDPULSE_REDIS_HOST: 127.0.0.1
+      BIDPULSE_REDIS_PORT: "6379"
+      BIDPULSE_REDIS_DATABASE: "1"
+      BIDPULSE_KAFKA_BOOTSTRAP: 127.0.0.1:9092
+      BIDPULSE_KAFKA_TOPIC: bidpulse_it_bid_event
+      BIDPULSE_KAFKA_DLT_TOPIC: bidpulse_it_bid_event.DLT
 
     services:
-      # —— MySQL：与本地 docker-compose 一致（空密码 + bidpulse 库）——
+      # —— MySQL：独立 bidpulse_it 库，与 demo 库完全隔离 ——
       mysql:
         image: mysql:8
         env:
           MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-          MYSQL_DATABASE: bidpulse
+          MYSQL_DATABASE: bidpulse_it
         ports:
           - 3306:3306
         options: >-
@@ -71,11 +97,22 @@ jobs:
           --health-start-period=30s
 
     steps:
+      # 所有 action 固定到 commit SHA（注释为对应版本），防止 tag 被移动导致供应链投毒。
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # 需要 HEAD^ 做 diff 检查；默认 depth=1 时父提交不存在
+          fetch-depth: 2
+
+      - name: Check whitespace errors
+        # 检查本次提交是否引入行尾空格 / 空格缩进等空白问题
+        run: git diff --check HEAD^ HEAD
+
+      - name: Scan for secrets
+        run: bash tools/check-secrets.sh
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "17"
@@ -86,29 +123,60 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y default-mysql-client
 
-      - name: Init schema
-        run: mysql -h 127.0.0.1 -uroot bidpulse < sql/all-schema.sql
+      - name: Init integration-test database
+        # 建 bidpulse_it 库 → baseline → 全部迁移（迁移必须幂等，否则这里会失败）
+        run: bash tools/init-it-db.sh
 
       - name: Verify test timezone
         # 防止 runner 或镜像悄悄退回 UTC；+0800 才继续往下跑。
         run: test "$(date +%z)" = "+0800" && date
 
-      - name: Run tests
-        # -Pfull-tests：CI 有 services，跑全量（含 @Tag("integration")）
-        run: mvn -B test -Pfull-tests
+      - name: Run tests and package
+        # verify 比 test 多走 package：确认可执行 jar 能构建出来，作为发布门禁。
+        # -Pfull-tests：CI 有 services，跑全量（含 @Tag("integration")）。
+        run: mvn -B -ntp verify -Pfull-tests
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Smoke test /actuator/health
+        # 打包产物在真实中间件上启动，健康检查 UP 才算通过。
+        run: |
+          set -euo pipefail
+          java -jar target/bidpulse-engine-*.jar > app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "health UP after ${i} attempts"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "应用未在 180s 内健康启动，最近日志："
+          tail -n 200 app.log
+          exit 1
 
   console-ui:
+    name: console-ui
     # 前后端分离：前端独立构建，不复用后端 job
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: console-ui
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
           cache: npm
@@ -131,3 +199,23 @@ jobs:
 
       - name: E2E tests (mock)
         run: npm run test:e2e
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-traces
+          path: console-ui/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  release-gate:
+    # 单一稳定门禁：分支保护只需要勾选这一个 check。
+    # 后端、前端任一失败，本 job 都不会执行，整体状态即失败。
+    name: release-gate
+    needs: [backend, console-ui]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All required jobs passed
+        run: echo "backend + console-ui passed; ready to merge/release."

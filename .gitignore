@@ -31,3 +31,19 @@ src/main/resources/static/console/
 *.webp
 *.bmp
 !docs/images/*.png
+
+# 本地环境变量与密钥：只保留模板
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.jks
+application-local.yml
+application-*.local.yml
+/secrets/
+/var/
+
+# 本地日志
+*.log

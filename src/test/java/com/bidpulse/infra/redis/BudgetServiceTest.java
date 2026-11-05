@@ -2,7 +2,6 @@ package com.bidpulse.infra.redis;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,6 +12,7 @@ import org.springframework.test.context.jdbc.Sql;
 import com.bidpulse.entity.Ad;
 import com.bidpulse.config.BidPulseProperties;
 import com.bidpulse.infra.buffer.ExhaustedBuffer;
+import com.bidpulse.testsupport.BidPulseIntegrationTest;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 故需 Kafka broker 可用（本地 docker-compose / CI services）。
  */
 @SpringBootTest
-@Tag("integration")
+@BidPulseIntegrationTest
 @Sql(scripts = "classpath:test-fixtures.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 @Sql(scripts = "classpath:test-cleanup.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
 class BudgetServiceTest {

@@ -158,9 +158,10 @@ docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/all-schema.sql
 docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/seed-demo.sql
 ```
 
-- `all-schema.sql`：一次建好 8 张表。脚本以 `DROP TABLE` 开头，**重跑会清空数据**，只用于初始化/重置。
+- `all-schema.sql`：一次建好 8 张业务表 + `schema_migration` 记录表。脚本以 `DROP TABLE` 开头，**重跑会清空数据**，只用于全新库初始化/重置。
 - `seed-demo.sql`：200 条广告 + 800 条定向条件，覆盖全部 **105 种「地域 × 年龄 × 性别」检索组合**（年龄 7 桶、性别含 `unknown`），保证任意请求都能命中候选，不会出现空广告。
 - 重复灌数前先执行：`TRUNCATE ad_target; TRUNCATE ad;`。
+- **存量库升级不要重跑 `all-schema.sql`**：按 `sql/migrations/` 下的版本顺序执行，规则见 [`sql/migrations/README.md`](sql/migrations/README.md)。
 
 ### 4. 启动应用
 
@@ -210,7 +211,7 @@ BIDPULSE_VIEWER_PASSWORD='<只读密码>' \
 mvn spring-boot:run
 ```
 
-未配置密码时，启动日志会生成一次性随机密码（仅本地演示）。登录接口为 `POST /console-api/v1/auth/login`，之后请求带 `Authorization: Bearer <token>`。存量库需要补建 `audit_log` 表（见 `sql/all-schema.sql` 第 8 节）；缺失时审计只打应用日志，不影响业务。
+未配置密码时，启动日志会生成一次性随机密码（仅本地演示）。登录接口为 `POST /console-api/v1/auth/login`，之后请求带 `Authorization: Bearer <token>`。存量库用 `sql/migrations/20261105_06_audit_log.sql` 补建 `audit_log`；缺失时审计只打应用日志，不影响业务。
 
 单 jar 演示时把前端产物构建到后端静态目录：
 
@@ -423,6 +424,28 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 
 完整配置项、默认值与注释见 `src/main/resources/application.yml` 与 `BidPulseProperties`。
 
+### 环境变量与配置校验
+
+所有基础设施连接信息都可由环境变量覆盖，本地、容器、CI 共用同一份 `application.yml`：
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `BIDPULSE_SERVER_ADDRESS` | `127.0.0.1` | 监听地址；容器内需设为 `0.0.0.0` |
+| `BIDPULSE_JDBC_URL` | 本机 `bidpulse` 库 | JDBC URL，集成测试必须指向 `*_it` 库 |
+| `BIDPULSE_DB_USERNAME` / `BIDPULSE_DB_PASSWORD` | `root` / 空 | 密码兼容旧的 `MYSQL_PASSWORD` |
+| `BIDPULSE_REDIS_HOST` / `PORT` / `DATABASE` | `127.0.0.1` / `6379` / `0` | 集成测试用 `1..15` |
+| `BIDPULSE_KAFKA_BOOTSTRAP` | `127.0.0.1:9092` | Kafka broker |
+| `BIDPULSE_KAFKA_TOPIC` / `BIDPULSE_KAFKA_DLT_TOPIC` | `bid_event` / `bid_event.DLT` | 集成测试用 `bidpulse_it_*` |
+| `BIDPULSE_AUTH_SECRET` | 空 | 生产必填 |
+| `BIDPULSE_ADMIN_PASSWORD` 等 | 空 | 生产需为所有已配置账号设置密码（默认 admin/operator/viewer） |
+| `BIDPULSE_HEALTH_DETAILS` | `when-authorized` | 本地排障可临时设 `always` |
+| `BIDPULSE_IT` | 未设置 | 集成测试开关，必须显式设为 `true` |
+
+- `.env.example` 是模板；**Spring Boot 不会自动读取 `.env`**，需要 `export`、`docker --env-file` 或 systemd `EnvironmentFile`。
+- `application.yml` 中的密码/密钥一律写成 `${ENV_VAR:}`，不写默认明文；`.env`、`*.key`、`*.pem`、`application-local.yml` 已加入 `.gitignore`，CI 用 `tools/check-secrets.sh` 扫描高置信度泄露。
+- `BidPulseProperties` 开启了 `@Validated` + Bean Validation：金额、比例、cron 表达式、Kafka 主题名、角色等在**启动时**校验，配置写错直接失败，不会等到运行期才炸。
+- `prod` profile 额外由 `ProductionConfigGuard` 兜底：缺少 `BIDPULSE_AUTH_SECRET`、数据库密码或**任一已配置账号**的密码时拒绝启动（默认配置含 admin/operator/viewer 三个账号）；`application-prod.yml` 只暴露 `health,info`。
+
 ---
 
 ## 八、代码结构
@@ -453,10 +476,11 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 ├─ auth/                登录、角色矩阵、安全过滤链
 ├─ audit/               审计过滤（写操作 + 安全拒绝）
 ├─ breaker/             Sentinel 熔断门
-├─ config/              配置绑定、Kafka 重试策略、时区守卫
+├─ config/              配置绑定/校验、生产密钥守卫、Kafka 重试策略、时区守卫
 ├─ console/             控制台 REST 契约、查询、CORS
 ├─ job/                 预算对账、DLT 重放
 ├─ admin/               广告管理、事务回滚/提交
+├─ testsupport/         集成测试守卫与 @BidPulseIntegrationTest 注解
 └─ infra/
    ├─ kafka/            消费模板错误分类
    └─ redis/            预算扣减、冷启动重建与预算同步
@@ -464,8 +488,8 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 其它目录：
 
-- `sql/`：`all-schema.sql`（统一 DDL，含 `audit_log`）+ `seed-demo.sql`（轻量演示造数）
-- `tools/`：大规模造数脚本、SQL 基准、兜底率压测脚本
+- `sql/`：`all-schema.sql`（全新库 baseline）+ `migrations/`（存量库 append-only 迁移）+ `seed-demo.sql`（轻量演示造数）
+- `tools/`：大规模造数脚本、SQL 基准、兜底率压测、`init-it-db.sh`（初始化 `_it` 测试库）、`check-secrets.sh`（密钥扫描）
 - `docs/`：文档索引、结构说明、重构记录；本地深度文档在 `docs/local/`（gitignored）
 - `data/`：`tools/` 生成的本地数据（gitignored，不入库）
 
@@ -479,34 +503,57 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 
 ```bash
 mvn test
-# 等价于只跑下列 21 个类（@Tag("integration") 的用例默认被排除）
-mvn -Dtest='PricingPolicyTest,BidPulsePropertiesTest,TimezoneConfigTest,SentinelBreakerGateTest,AbstractBidEventConsumerTest,ApiErrorHandlingTest,FallbackAdProviderTest,KafkaErrorHandlingConfigTest,DltReplayJobTest,ConsoleApiTest,ConsoleQueryServiceTest,AdAdminServiceTest,ConsoleWriteGateTest,ConsoleExperimentsControllerTest,ConsoleDataControllerTest,ConsoleCorsConfigTest,AuthServiceTest,SecurityConfigTest,AuditLogFilterTest,BudgetAmountsTest,BudgetKeysTest' test
 ```
+
+默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 95 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算。
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
 > `mvn -Dtest=BidFlowTest -Pfull-tests test`。
 
-覆盖：二价定价边界、配置绑定、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算，共 77 个用例。
-
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交）都带 `@Tag("integration")`，共 32 个用例，会真实连接 MySQL / Redis / Kafka。加上 77 个纯单测，全量为 109 个（2026-11-01 已在本机三件套上跑通 109/109）：
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交），共 32 个用例。
+
+这些类统一使用 `testsupport/BidPulseIntegrationTest`，隔离分三层：
+
+1. **显式开关**：只有 `BIDPULSE_IT=true` 才执行。普通 `mvn test` 已由 `@Tag("integration")` 排除；显式启用 `-Pfull-tests` 却没设开关时会直接失败，避免静默跳过制造「全绿」假象。
+2. **环境变量守卫**：JDBC URL 必须是本机 `*_it` 库；Redis database 必须是 `1..15`；Kafka 主主题与死信主题都必须以 `bidpulse_it_` 开头。
+3. **连接元数据守卫**：Spring 上下文启动后，`IntegrationDataSourceGuard` 用实际连接的 `DatabaseMetaData` 再校验一次库名，防止环境变量被覆盖或连接串写错。
+
+初始化测试库（建库 + baseline + 全部迁移，可重复执行）：
 
 ```bash
-docker compose up -d
-docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/all-schema.sql
-mvn test -Pfull-tests      # 跑全量（单测 + 集成）
+tools/init-it-db.sh
 ```
+
+跑全量：
+
+```bash
+BIDPULSE_IT=true \
+BIDPULSE_JDBC_URL='jdbc:mysql://127.0.0.1:3306/bidpulse_it?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai' \
+BIDPULSE_REDIS_DATABASE=1 \
+BIDPULSE_KAFKA_TOPIC=bidpulse_it_bid_event \
+BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
+mvn test -Pfull-tests
+```
+
+加上 95 个纯单测，全量为 127 个用例。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。
-> 非 Docker 的本机 MySQL 若给 root 设了密码，用 `MYSQL_PASSWORD=xxx` 环境变量覆盖（`application.yml` 已支持）；
-> 缺 Redis / Kafka 时，32 个集成用例会报 `Could not open JDBC Connection` / 连接拒绝。
+> 非 Docker 的本机 MySQL 若给 root 设了密码，用 `BIDPULSE_DB_PASSWORD=xxx`（或兼容的 `MYSQL_PASSWORD`）覆盖；
+> 缺 Redis / Kafka 时，集成用例会报连接拒绝，而不是悄悄跳过（前提是 `BIDPULSE_IT=true`）。
 
 ### CI
 
-`.github/workflows/ci.yml` 在 GitHub Actions 中启动 MySQL / Redis / Kafka services，初始化 schema 后执行 `mvn -B test -Pfull-tests`（全量，`TZ=Asia/Shanghai` 并在测试前校验 `date +%z`）；另有一个独立 `console-ui` job 执行 `npm ci && npm run lint && npm run build && npm test && npm run test:e2e`。
+`.github/workflows/ci.yml` 的发布门禁：
+
+- **最小权限**：`permissions: contents: read`；同一分支的新推送自动取消旧构建；所有 job 有 `timeout-minutes`。
+- **供应链**：`actions/checkout`、`setup-java`、`setup-node`、`upload-artifact` 全部固定到 commit SHA。
+- **后端**：空白字符检查 → `tools/check-secrets.sh` 密钥扫描 → `tools/init-it-db.sh` 初始化 `bidpulse_it` 并跑迁移 → 校验 `TZ=Asia/Shanghai` → `mvn -B -ntp verify -Pfull-tests`（全量测试 + 打包）→ 上传 surefire 报告 → 启动 jar 做 `/actuator/health` 冒烟。
+- **前端**：`npm ci && npm run lint && npm run build && npm test && npm run test:e2e`，失败时上传 Playwright trace。
+- **单一门禁**：`release-gate` job 依赖 backend + console-ui，分支保护只需勾选这一个 check。
 
 ### 前端测试
 
@@ -578,22 +625,17 @@ python tools/bench_fallback.py --port 8081 --n 2000 --mode nocand --tag "S2-候�
 
 ## 十一、数据库与升级
 
-7 张业务表 + 1 张审计表：`ad`、`ad_target`、`bid_log`、`billing_event`、`bid_stat_hourly`、`processed_event`、`ad_freq`、`audit_log`。
+8 张业务表 + 1 张迁移记录表：`ad`、`ad_target`、`bid_log`、`billing_event`、`bid_stat_hourly`、`processed_event`、`ad_freq`、`audit_log`、`schema_migration`。
 详细字段、索引与设计取舍见 `sql/all-schema.sql` 的建表注释。
 
-> `all-schema.sql` 含 `DROP TABLE`，只能用于初始化/重置。存量库升级请执行文件头部注释中的 `ALTER`：
+> `all-schema.sql` 含 `DROP TABLE`，**只能用于全新库初始化/重置**。
+> 存量库升级执行 `sql/migrations/` 下的版本脚本，规则与模板见 [`sql/migrations/README.md`](sql/migrations/README.md)：
 >
-> ```sql
-> -- bid_log.age 放宽为可空：只传 ageBucket 的请求不再被伪造成 age=0
-> ALTER TABLE bid_log MODIFY age TINYINT NULL DEFAULT NULL
->   COMMENT '年龄，请求未提供（仅传 ageBucket）时为 NULL';
->
-> -- processed_event 增加保留期字段与索引（ProcessedEventCleaner 依赖）
-> ALTER TABLE processed_event
->   ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
->     COMMENT '首次处理时间，供保留期清理',
->   ADD KEY idx_created (created_at);
-> ```
+> - 文件名 `YYYYMMDD_NN_description.sql`，按字典序执行；
+> - 只追加、不改历史；用 `information_schema` 判断列/索引是否已存在，保证可重复执行；
+> - 加索引统一 `ALGORITHM=INPLACE, LOCK=NONE`；
+> - 每个脚本末尾写入 `schema_migration`，失败时不会留下「已执行」记录；
+> - CI 每次构建都会对 `bidpulse_it` 重跑 baseline + 全部迁移，不幂等的迁移会直接失败。
 
 ---
 

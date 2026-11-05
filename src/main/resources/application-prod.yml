@@ -1,0 +1,13 @@
+# 生产 profile：只放「安全默认值」，不放任何真实凭据。
+# 启动前必须显式提供 BIDPULSE_AUTH_SECRET、BIDPULSE_DB_PASSWORD 与各账号密码，
+# 缺失时 ProductionConfigGuard 会让应用启动失败。
+management:
+  endpoint:
+    health:
+      # 匿名探针只看 status；DB/Redis/Kafka 细节仅 ADMIN 可见。
+      show-details: when-authorized
+  endpoints:
+    web:
+      exposure:
+        # 生产默认不暴露 metrics/prometheus；需要采集时显式覆盖
+        include: health,info

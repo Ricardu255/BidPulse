@@ -1,50 +1,49 @@
 -- =====================================================================
--- BidPulse · 实时竞价广告投放引擎 · 统一建表脚本（唯一权威 DDL）
+-- BidPulse · 实时竞价广告投放引擎 · 全新库 baseline 建表脚本
 -- =====================================================================
--- 本文件整合 M0 核心业务表 + M6 旁路消费表，作为初始化唯一入口。
+-- ⚠ 本文件只用于「全新的空库」：它包含 DROP TABLE，会清掉同名业务表的数据。
+--   已有数据的库（本机 demo / 测试 / 生产）不要执行本文件，
+--   请按顺序执行 sql/migrations/ 下的迁移脚本（见 sql/migrations/README.md）。
 --
 -- 执行方式（MySQL 客户端，库名 bidpulse，对应 docker-compose.yml 的 MYSQL_DATABASE）：
 --   docker exec -i bidpulse-mysql mysql -uroot bidpulse < sql/all-schema.sql
 --   或（宿主已装客户端，项目根目录）：
 --   mysql -h127.0.0.1 -uroot bidpulse < sql/all-schema.sql
+--   集成测试库（必须是 *_it 库）：
+--   tools/init-it-db.sh
 --
--- 说明：
+-- 结构说明：
+--   本文件整合 M0 核心业务表 + M6 旁路消费表，共 8 张业务表 + 1 张迁移记录表。
 --   原 schema.sql / m6-counter-schema.sql 对 billing_event、bid_stat_hourly
 --   存在双重定义且结构冲突（schema.sql 版本与消费代码不匹配，会导致
 --   BillingReconConsumer / HourlyPreaggConsumer 报 bad SQL grammar）。
---   本文件以「与消费代码匹配」的版本为准，去重后共 7 张唯一表。
+--   本文件以「与消费代码匹配」的版本为准。
 --   旧的三个分散文件（schema.sql / m1_indexes.sql / m6-counter-schema.sql）
 --   初始化时不要再单独执行，只用本文件。
 --
--- 存量库升级（本文件含 DROP TABLE，不能直接跑在已有数据的库上）：
---   管理端索引与定向唯一键用在线 DDL 添加，不阻塞读写：
---     ALTER TABLE ad        ADD KEY idx_adv (advertiser_id),
---                           ALGORITHM=INPLACE, LOCK=NONE;
---     -- 加唯一键前先查重（有重复行会直接失败）：
---     --   SELECT ad_id, dim_type, dim_value, COUNT(*) FROM ad_target
---     --   GROUP BY ad_id, dim_type, dim_value HAVING COUNT(*) > 1;
---     ALTER TABLE ad_target ADD UNIQUE KEY uk_ad_dim (ad_id, dim_type, dim_value),
---                           ALGORITHM=INPLACE, LOCK=NONE;
---
---   本轮新增（存量库需手动执行）：
---     -- bid_log.age 放宽为可空：只传 ageBucket 的请求不再被伪造成 age=0
---     ALTER TABLE bid_log MODIFY age TINYINT NULL DEFAULT NULL
---       COMMENT '年龄，请求未提供（仅传 ageBucket）时为 NULL';
---     -- processed_event 增加保留期字段与索引（ProcessedEventCleaner 依赖）
---     ALTER TABLE processed_event
---       ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
---         COMMENT '首次处理时间，供保留期清理',
---       ADD KEY idx_created (created_at);
---     -- billing_event 按 (ad_id, ts) 汇总当日消耗（BudgetReconJob 对账 / 冷启动重建）
---     -- 不建索引时每次对账都是全表扫描，账单表越大越慢。在线 DDL 不阻塞读写：
---     ALTER TABLE billing_event ADD KEY idx_ad_ts (ad_id, ts),
---                           ALGORITHM=INPLACE, LOCK=NONE;
+-- 与迁移的关系：
+--   本 baseline 已包含 sql/migrations/ 下 20261105_01 ~ 06 的全部结构变更，
+--   并在 schema_migration 中记录这些版本；因此全新库执行完本文件后，
+--   再跑迁移脚本只会命中「已存在则跳过」分支，不会重复改结构。
 -- =====================================================================
 
 -- 数据库需由调用方预先创建（docker-compose / CI services 会创建 bidpulse），
 -- 并通过命令末尾的库名指定目标库，例如：
 --   mysql -uroot bidpulse < sql/all-schema.sql
---   mysql -uroot bidpulse_test < sql/all-schema.sql
+--   mysql -uroot bidpulse_it < sql/all-schema.sql
+
+-- ---------------------------------------------------------------------
+-- 0. schema_migration · 迁移记录（append-only）
+--    全新库由本文件创建并写入 baseline 已包含的版本；
+--    存量库由 sql/migrations/00000000_00_bootstrap.sql 创建。
+--    注意：本表不使用 DROP TABLE，重复执行 baseline 也保留历史记录。
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema_migration (
+  version     VARCHAR(32)  NOT NULL COMMENT '迁移版本号，如 20261105_01',
+  description VARCHAR(128) NOT NULL COMMENT '迁移说明',
+  applied_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '首次执行时间',
+  PRIMARY KEY (version)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='数据库迁移记录（append-only）';
 
 -- ---------------------------------------------------------------------
 -- 1. ad · 广告主投放的广告（50 万行）
@@ -221,3 +220,16 @@ CREATE TABLE audit_log (
   PRIMARY KEY (id),
   KEY idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='控制台与管理端写操作审计';
+
+-- ---------------------------------------------------------------------
+-- baseline 已包含的迁移版本（与 sql/migrations/ 一一对应）
+-- 存量库执行迁移脚本时也会写入同样的记录；INSERT IGNORE 保证只记一次。
+-- ---------------------------------------------------------------------
+INSERT IGNORE INTO schema_migration(version, description) VALUES
+  ('00000000_00', 'bootstrap: 迁移记录表'),
+  ('20261105_01', 'bid_log.age 放宽为可空'),
+  ('20261105_02', 'processed_event.created_at + idx_created'),
+  ('20261105_03', 'billing_event.idx_ad_ts'),
+  ('20261105_04', 'ad.idx_adv'),
+  ('20261105_05', 'ad_target.uk_ad_dim'),
+  ('20261105_06', 'audit_log 建表');
