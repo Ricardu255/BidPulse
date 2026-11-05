@@ -1,41 +1,30 @@
 package com.bidpulse.console.api;
 
 import com.bidpulse.api.ApiResponse;
-import com.bidpulse.api.BizException;
 import com.bidpulse.console.dto.DataView;
-import org.springframework.beans.factory.annotation.Qualifier;
+import com.bidpulse.console.query.ConsoleDataQueryService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
 /**
- * 控制台数据浏览：只允许白名单表，只支持少量等值过滤与 LIMIT。
+ * 控制台数据浏览入口：只做 HTTP 参数接收与响应包装。
  *
- * <p>不做通用 SQL 控制台：表名、列名、排序全部在服务端固定，过滤值走占位符，
- * 避免把数据库暴露给前端。
- *
- * <p>查询走控制台专用只读连接池，与竞价/消费的主池隔离；即使数据浏览被反复刷新，
- * 也最多占用 {@code bidpulse.console.read-db.max-pool-size} 个连接。
+ * <p>白名单、SQL 组装与只读池都在 {@link ConsoleDataQueryService}；
+ * controller 不直接依赖 JdbcTemplate，避免 SQL 逐渐散落到 HTTP 层。
  */
 @RestController
 @RequestMapping("/console-api/v1/data")
 @ConditionalOnProperty(prefix = "bidpulse.console", name = "enabled", havingValue = "true")
 public class ConsoleDataController {
 
-    private static final int MAX_LIMIT = 200;
+    private final ConsoleDataQueryService dataQueryService;
 
-    private final JdbcTemplate jdbc;
-
-    public ConsoleDataController(@Qualifier("consoleReadJdbcTemplate") JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public ConsoleDataController(ConsoleDataQueryService dataQueryService) {
+        this.dataQueryService = dataQueryService;
     }
 
     @GetMapping("/{table}")
@@ -43,87 +32,6 @@ public class ConsoleDataController {
                                        @RequestParam(defaultValue = "50") int limit,
                                        @RequestParam(required = false) Long adId,
                                        @RequestParam(required = false) String requestId) {
-        int cap = Math.max(1, Math.min(limit, MAX_LIMIT));
-        return ApiResponse.ok(switch (table) {
-            case "bid_log" -> bidLog(cap, adId, requestId);
-            case "billing_event" -> billingEvent(cap, adId);
-            case "bid_stat_hourly" -> hourly(cap, adId);
-            case "ad_freq" -> adFreq(cap, adId);
-            case "processed_event" -> processedEvent(cap);
-            default -> throw BizException.badRequest("不支持的数据表: " + table);
-        });
-    }
-
-    private DataView bidLog(int limit, Long adId, String requestId) {
-        List<Object> args = new ArrayList<>();
-        StringBuilder sql = new StringBuilder(
-                "SELECT request_id, ad_id, win_bid, pay_price, has_ad, cost_ms, "
-                        + "DATE_FORMAT(bid_at, '%Y-%m-%d %H:%i:%s') AS bid_at FROM bid_log WHERE 1=1");
-        if (adId != null) {
-            sql.append(" AND ad_id = ?");
-            args.add(adId);
-        }
-        if (requestId != null && !requestId.isBlank()) {
-            sql.append(" AND request_id = ?");
-            args.add(requestId.trim());
-        }
-        sql.append(" ORDER BY id DESC LIMIT ?");
-        args.add(limit);
-        return new DataView("bid_log",
-                List.of("request_id", "ad_id", "win_bid", "pay_price", "has_ad", "cost_ms", "bid_at"),
-                jdbc.queryForList(sql.toString(), args.toArray()));
-    }
-
-    private DataView billingEvent(int limit, Long adId) {
-        List<Object> args = new ArrayList<>();
-        StringBuilder sql = new StringBuilder(
-                "SELECT event_id, ad_id, advertiser_id, pay_price, ts, "
-                        + "FROM_UNIXTIME(ts / 1000) AS event_time FROM billing_event WHERE 1=1");
-        if (adId != null) {
-            sql.append(" AND ad_id = ?");
-            args.add(adId);
-        }
-        sql.append(" ORDER BY ts DESC LIMIT ?");
-        args.add(limit);
-        return new DataView("billing_event",
-                List.of("event_id", "ad_id", "advertiser_id", "pay_price", "ts", "event_time"),
-                jdbc.queryForList(sql.toString(), args.toArray()));
-    }
-
-    private DataView hourly(int limit, Long adId) {
-        List<Object> args = new ArrayList<>();
-        StringBuilder sql = new StringBuilder(
-                "SELECT stat_hour, ad_id, impressions, spend FROM bid_stat_hourly WHERE 1=1");
-        if (adId != null) {
-            sql.append(" AND ad_id = ?");
-            args.add(adId);
-        }
-        sql.append(" ORDER BY stat_hour DESC LIMIT ?");
-        args.add(limit);
-        return new DataView("bid_stat_hourly",
-                List.of("stat_hour", "ad_id", "impressions", "spend"),
-                jdbc.queryForList(sql.toString(), args.toArray()));
-    }
-
-    private DataView adFreq(int limit, Long adId) {
-        List<Object> args = new ArrayList<>();
-        StringBuilder sql = new StringBuilder("SELECT ad_id, cnt FROM ad_freq WHERE 1=1");
-        if (adId != null) {
-            sql.append(" AND ad_id = ?");
-            args.add(adId);
-        }
-        sql.append(" ORDER BY cnt DESC LIMIT ?");
-        args.add(limit);
-        return new DataView("ad_freq",
-                List.of("ad_id", "cnt"),
-                jdbc.queryForList(sql.toString(), args.toArray()));
-    }
-
-    private DataView processedEvent(int limit) {
-        return new DataView("processed_event",
-                List.of("event_id", "grp", "created_at"),
-                jdbc.queryForList(
-                        "SELECT event_id, grp, created_at FROM processed_event "
-                                + "ORDER BY created_at DESC LIMIT ?", limit));
+        return ApiResponse.ok(dataQueryService.query(table, limit, adId, requestId));
     }
 }

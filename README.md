@@ -2,6 +2,7 @@
 
 > **第一次阅读**：先看本文件的「零、这个程序是做什么的」和「四、快速开始」；想看代码结构直接跳 [`docs/architecture.md`](docs/architecture.md)。
 > **文档入口**：[`docs/README.md`](docs/README.md) 按「先跑 → 结构 → 深挖」组织；根目录不再堆放多份长文档。
+> **参与开发**：分支、测试矩阵、迁移与控制台写接口规则见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 **目录**：
 · [这个程序是做什么的](#零这个程序是做什么的)
@@ -66,6 +67,7 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 - **决策轨迹可回看**：控制台发起的竞价会记录候选裁决（成交 / 余额不足 / 频次超限 / 需播种 / Redis 异常）、兜底原因与耗时分解，随明细异步落 `bid_log.trace_json`；外部 `/bid` 不采集，热路径零额外开销。
 - **运维写幂等 + 前端 latest-wins**：DLT 重放、对账、暂停/恢复消费支持 `Idempotency-Key`（Redis `SET NX PX`，10 分钟窗口，重复 409）；控制台轮询改为不重叠 + 请求序号最新优先，超时未更新时明确标记「数据可能已过期」。
 - **演示控制台（前后端分离）**：独立 `console-ui/`（Vue 3 + Vite + Element Plus），通过 `/console-api/v1` 展示概览、竞价结果、广告投放、预算/频次状态、Kafka/DLT/对账、数据浏览与运行时开关；后端不渲染页面。
+- **工程纪律可执行**：ArchUnit 固化分层边界（热路径不依赖控制台、controller 不碰 SQL、DTO 不依赖服务层）；迁移命名 / `schema_migration` 记录 / README / baseline 种子由约定测试校验；生产代码禁止 `System.out` / `printStackTrace`；Maven Enforcer 校验 JDK 17+ / Maven 3.8+，`.gitattributes` 统一 LF。
 
 ---
 
@@ -406,9 +408,12 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 - **连接隔离**：控制台不再与竞价/消费共享主池。`DataSourceConfig` 注册第二个 Hikari 池
   `bidpulse-console-reader`（默认上限 4），控制台查询走 `consoleReadJdbcTemplate`；
   即使概览被反复刷新或数据浏览被误用，也最多占用 4 个连接，不会把竞价请求堵在 `connection-timeout` 上。
-- **只读三层保证**：池级 `readOnly=true`（连接初始化时执行 `SET SESSION TRANSACTION READ ONLY`）
-  + 事务级 `SET TRANSACTION READ ONLY`（`DataSourceTransactionManager#setEnforceReadOnly`）
-  + `JdbcTemplate.queryTimeout=2s`（语句级）。误写会被数据库直接拒绝，慢报表也不会长时间占住连接。
+- **只读两层保证**：池级 `readOnly=true`（Connector/J 在连接初始化时执行
+  `SET SESSION TRANSACTION READ ONLY`，误写会被数据库直接拒绝）
+  + `JdbcTemplate.queryTimeout=2s`（语句级，慢报表不会长时间占住连接）。
+  快照事务声明 `readOnly` + `REPEATABLE_READ` 语义，但**不**开启
+  `setEnforceReadOnly`：连接已经是只读时，Connector/J 会把事务级的
+  `SET TRANSACTION READ ONLY` 当成「只读连接上的写语句」拒绝，事务根本开不起来。
 - **概览快照**：概览页的请求数、兜底数、消耗、P95、近 30 分钟趋势在同一个
   `REPEATABLE_READ` 只读事务里读取，避免并发写入时拼出「请求数已更新、消耗还没更新」的自相矛盾数字；
   Kafka lag 与 Actuator 健康检查在事务外执行，外部 RPC 不会拖长只读事务。
@@ -524,7 +529,7 @@ src/main/java/com/bidpulse
 ├─ admin/               管理端服务
 ├─ auth/                登录、Bearer token、角色与安全过滤链
 ├─ audit/               审计：写操作、登录与被拒绝的 401/403
-├─ console/             控制台 BFF：api / command（含 IdempotencyService）/ query（含轨迹回看）/ dto / config
+├─ console/             控制台 BFF：api / command（含 IdempotencyService）/ query（含轨迹回看、数据浏览）/ dto / config
 ├─ event/               Kafka 事件契约（BidEvent）
 ├─ infra/
 │  ├─ persistence/      MyBatis Mapper（AdMapper、AuditLogMapper）
@@ -544,9 +549,11 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 ├─ audit/               审计过滤（写操作 + 安全拒绝）
 ├─ breaker/             Sentinel 熔断门
 ├─ config/              配置绑定/校验、生产密钥守卫、Kafka 重试策略、时区守卫
-├─ console/             控制台 REST 契约、查询、轨迹回看、幂等键、CORS
+├─ console/             控制台 REST 契约、查询、数据浏览、轨迹回看、幂等键、CORS
 ├─ job/                 预算对账、DLT 重放
 ├─ admin/               广告管理、事务回滚/提交
+├─ architecture/        ArchUnit 分层规则（热路径、controller、DTO、query/command 边界）
+├─ quality/             迁移命名/记录/文档一致性、源码卫生（无 System.out/printStackTrace）
 ├─ testsupport/         集成测试守卫与 @BidPulseIntegrationTest 注解
 └─ infra/
    ├─ kafka/            消费模板错误分类
@@ -572,7 +579,7 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 mvn test
 ```
 
-默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 131 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算、决策轨迹构建与查询边界、幂等键首放/重复/超长/fail-open、前端轮询控制器不重叠与最新优先。
+默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 162 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算、决策轨迹构建与查询边界、幂等键首放/重复/超长/fail-open、数据浏览白名单与参数化 SQL、ArchUnit 分层规则、迁移命名/记录/文档一致性、源码卫生（无 `System.out` / `printStackTrace`）、前端轮询控制器不重叠与最新优先。
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
@@ -605,7 +612,7 @@ BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
 mvn test -Pfull-tests
 ```
 
-加上 131 个纯单测，全量为 175 个用例。
+加上 162 个纯单测，全量为 206 个用例。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。

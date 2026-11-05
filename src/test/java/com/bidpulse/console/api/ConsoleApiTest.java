@@ -15,6 +15,7 @@ import com.bidpulse.console.dto.OverviewView;
 import com.bidpulse.console.dto.TrendPoint;
 import com.bidpulse.api.dto.BidTrace;
 import com.bidpulse.console.query.ConsoleBidTraceService;
+import com.bidpulse.console.query.ConsoleDataQueryService;
 import com.bidpulse.console.query.ConsoleOverviewService;
 import com.bidpulse.console.query.ConsoleQueryService;
 import com.bidpulse.console.query.DltQueryService;
@@ -34,7 +35,6 @@ import com.bidpulse.auth.AuthService;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -119,14 +119,11 @@ class ConsoleApiTest {
     private ReconReportStore reconReportStore;
 
     /**
-     * Bean 名必须与 ConsoleDataController 的 @Qualifier 一致。
-     *
-     * <p>Spring Boot 3.2 的 {@code @MockBean} 默认不会用字段名做 Bean 名：
-     * 容器里没有同类型 Bean 时走 {@code BeanNameGenerator} 生成名字，按名注入会失败。
-     * 这里显式指定 {@code name}，而不是依赖字段名。
+     * controller 只依赖查询服务；JdbcTemplate 与 SQL 细节由
+     * {@code ConsoleDataQueryServiceTest} 覆盖，MVC 切片不需要连只读池。
      */
-    @MockBean(name = "consoleReadJdbcTemplate")
-    private JdbcTemplate consoleReadJdbcTemplate;
+    @MockBean
+    private ConsoleDataQueryService dataQueryService;
 
     @BeforeEach
     void enableConsoleWrite() {

@@ -70,7 +70,12 @@ class BidPulsePropertiesTest {
     @Test
     @DisplayName("未配置时默认值与 application.yml 口径一致")
     void defaultsMatchYaml() {
-        runner.run(ctx -> {
+        // CI 与本地全量测试会导出 BIDPULSE_KAFKA_TOPIC / BIDPULSE_KAFKA_DLT_TOPIC
+        // 指向 *_it 主题；显式钉住默认值，避免环境变量让「默认值」测试失真。
+        runner.withPropertyValues(
+                        "bidpulse.kafka.topic=bid_event",
+                        "bidpulse.kafka.dlt-topic=bid_event.DLT")
+                .run(ctx -> {
             BidPulseProperties p = ctx.getBean(BidPulseProperties.class);
             assertEquals(0, new BigDecimal("0.01").compareTo(p.getMinIncrement()));
             assertEquals(1000, p.getTimeout().getTotalMs());

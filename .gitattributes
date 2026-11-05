@@ -1,0 +1,22 @@
+# 仓库内容统一按 LF 存储与检出，避免 Windows（core.autocrlf=true）与 CI 之间
+# 出现整文件换行差异。需要 CRLF 的 Windows 脚本单独声明。
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# 二进制文件不做换行转换，也不参与文本 diff
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.jar  binary
+*.zip  binary
+*.gz   binary
+*.pdf  binary

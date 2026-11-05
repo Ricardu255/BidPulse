@@ -66,7 +66,10 @@ class ConsoleReadPoolTest {
     void readPoolRejectsWrites() {
         DataAccessException ex = assertThrows(DataAccessException.class, () ->
                 consoleReadJdbc.update("INSERT INTO ad_freq(ad_id, cnt) VALUES(?, 1)", 900099L));
-        assertTrue(ex.getMessage().toUpperCase().contains("READ ONLY"),
+        // Connector/J 的客户端文案是 "Connection is read-only"，服务端错误可能是
+        // "Cannot execute statement in a READ ONLY transaction"，两种都接受。
+        String message = ex.getMessage().toUpperCase(java.util.Locale.ROOT);
+        assertTrue(message.contains("READ-ONLY") || message.contains("READ ONLY"),
                 () -> "期望 MySQL 只读事务错误，实际=" + ex.getMessage());
     }
 

@@ -4,6 +4,8 @@ import com.bidpulse.api.dto.BidRequest;
 import com.bidpulse.api.dto.BidTrace;
 import com.bidpulse.bid.BidService;
 import com.bidpulse.testsupport.BidPulseIntegrationTest;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -90,7 +92,9 @@ class ConsoleBidTraceIntegrationTest {
 
         String json = awaitTraceJson(result.getRequestId());
         assertNotNull(json, "控制台竞价的 trace_json 必须落库");
-        assertTrue(json.contains("\"outcome\":\"WIN\""), "落库内容应与返回轨迹一致");
+        // MySQL JSON 列会规范化空白（`"outcome": "WIN"`），不要用无空格的字符串匹配
+        JsonNode persistedJson = new ObjectMapper().readTree(json);
+        assertEquals("WIN", persistedJson.path("outcome").asText(), "落库内容应与返回轨迹一致");
 
         BidTrace persisted = traceService.trace(result.getRequestId());
         assertEquals(result.getRequestId(), persisted.requestId());

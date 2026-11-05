@@ -108,8 +108,11 @@ public class DataSourceConfig {
      * 概览快照事务：把多次聚合查询放进同一个 REPEATABLE_READ 只读事务，
      * 避免「请求数、消耗、趋势」分别读取时看到不同的时间点，拼出一个自相矛盾的概览。
      *
-     * <p>{@code setEnforceReadOnly(true)} 让事务开始时执行 {@code SET TRANSACTION READ ONLY}，
-     * 与连接池的会话级只读形成双保险。
+     * <p>只读约束由连接池负责：Hikari 的 {@code readOnly=true} 会让 Connector/J 在会话上
+     * 执行 {@code SET SESSION TRANSACTION READ ONLY}，写入直接被数据库拒绝。
+     * 这里<b>不能</b>再调用 {@code setEnforceReadOnly(true)}：连接已经是只读时，
+     * Connector/J 会把事务开始时的 {@code SET TRANSACTION READ ONLY} 当成
+     * 「只读连接上的写语句」直接抛错，导致概览快照事务根本开不起来。
      *
      * <p>注意：本地 JDBC 事务不会因 {@code setTimeout} 自动回滚（
      * {@code DataSourceTransactionManager} 只把超时记在 ConnectionHolder 上，不做强制中断）。
@@ -121,7 +124,6 @@ public class DataSourceConfig {
             @Qualifier("consoleReadDataSource") DataSource dataSource,
             BidPulseProperties props) {
         DataSourceTransactionManager txManager = new DataSourceTransactionManager(dataSource);
-        txManager.setEnforceReadOnly(true);
         txManager.afterPropertiesSet();
 
         TransactionTemplate template = new TransactionTemplate(txManager);

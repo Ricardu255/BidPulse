@@ -91,3 +91,4 @@ VALUES ('YYYYMMDD_NN', '一句话说明');
 | `20261105_05` | `ad_target.uk_ad_dim`（防重复定向导致二价退化） |
 | `20261105_06` | `audit_log` 建表（早期库缺失时补建） |
 | `20261105_07` | `processed_event` / `billing_event` 增加 `payload_hash`（识别同 eventId 不同载荷） |
+| `20261105_08` | `bid_log.trace_json`（控制台竞价决策轨迹，可空、不参与对账） |

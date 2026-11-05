@@ -82,7 +82,7 @@ com.bidpulse
 ├─ console/             控制台 BFF
 │  ├─ api/              /console-api/v1 controller
 │  ├─ command/          运维写动作（DLT 单条重放等）+ IdempotencyService
-│  ├─ query/            只读聚合（概览、Kafka lag、DLT 浏览、决策轨迹回看）
+│  ├─ query/            只读聚合（概览、Kafka lag、DLT 浏览、数据浏览、决策轨迹回看）
 │  ├─ dto/              控制台响应模型
 │  └─ config/           CORS 等控制台装配
 ├─ event/               Kafka 事件契约（BidEvent）
@@ -197,6 +197,7 @@ billing-event / hourly-preagg / freq-antifraud 三个消费组
 | 数据源/只读池 | `config/DataSourceConfig` | 主池 `@Primary`；只读池不注册第二个事务管理器 Bean |
 | 定时任务 | `job/` | `@Scheduled` 与配置项在 `application.yml` |
 | 控制台只读接口 | `console/query` + `console/api` | 走 `consoleReadJdbcTemplate`，避免把聚合写进 controller |
+| 控制台数据浏览 | `console/query/ConsoleDataQueryService` + `console/api/ConsoleDataController` | 表名白名单、列与排序固定、过滤值全参数化；controller 不碰 SQL |
 | 控制台运维写操作 | `console/command` + `console/api` | 需要角色校验与审计；新增写接口记得接 `IdempotencyService` |
 | 决策轨迹 | `bid/BidTraceBuilder` + `console/query/ConsoleBidTraceService` | 只允许控制台入口采集；候选封顶 10 条，禁止加用户上下文 |
 | 登录/角色 | `auth/` | 密码从环境变量注入 |
@@ -218,7 +219,9 @@ src/test/java/com/bidpulse
 ├─ auth/                   登录、角色矩阵、安全过滤链
 ├─ audit/                  审计过滤
 ├─ config/                 配置绑定/校验、生产密钥守卫、Kafka 重试、时区
-├─ console/                控制台 REST 契约、查询、轨迹回看、幂等键、CORS、只读池与概览快照
+├─ console/                控制台 REST 契约、查询、数据浏览、轨迹回看、幂等键、CORS、只读池与概览快照
+├─ architecture/           ArchUnit 分层规则
+├─ quality/                迁移约定与源码卫生
 ├─ testsupport/            IntegrationTestGuard、IntegrationDataSourceGuard、@BidPulseIntegrationTest
 ├─ infra/redis/            预算 Lua、冷启动重建、频次
 ├─ infra/kafka/            消费模板错误分类、载荷指纹、计费冲突真库集成测试
@@ -230,6 +233,20 @@ src/test/java/com/bidpulse
 - `mvn test -Pfull-tests` 跑全量；测试库用 `tools/init-it-db.sh` 初始化；
 - 前端：`npm run lint`、`npm test`、`npm run test:e2e`；
 - 真实后端 E2E 需要 `E2E_BASE_URL` + `E2E_USERNAME` / `E2E_PASSWORD`。
+
+### 7.1 分层与仓库守卫
+
+约定不靠口头记忆，能自动检查的都落成测试或构建插件：
+
+| 检查 | 位置 | 拦截什么 |
+|---|---|---|
+| ArchUnit 分层规则 | `architecture/ArchitectureRulesTest` | 热路径依赖控制台/身份模块、controller 碰 JDBC/持久化、DTO 依赖服务层、query 与 command 互相依赖、字段 `@Autowired`、controller 被反向引用 |
+| 迁移约定 | `quality/MigrationConventionTest` | 文件名不合规、版本重复、漏写 `schema_migration`、baseline 种子/README 版本表漂移、破坏性 SQL |
+| 源码卫生 | `quality/SourceHygieneTest` | 生产代码出现 `System.out/err`、`printStackTrace` |
+| 构建环境 | `maven-enforcer-plugin` | JDK < 17、Maven < 3.8、pom 重复依赖声明 |
+| 换行策略 | `.gitattributes` | Windows `core.autocrlf` 造成的整文件 CRLF 差异 |
+
+新增规则前先确保现有代码满足；不要让规则长期 `@Disabled`。
 
 ---
 

@@ -128,10 +128,47 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+
+    <!-- ArchUnit：把分层约定变成可执行测试（热路径不依赖控制台、controller 不碰 SQL 等） -->
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <version>1.3.0</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
+      <!--
+        构建环境门禁：版本不对或 pom 出现重复依赖声明时直接失败，
+        而不是等到运行期才暴露「本机 JDK 不对」。
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.4.1</version>
+        <executions>
+          <execution>
+            <id>enforce-build-environment</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[17,)</version>
+                </requireJavaVersion>
+                <requireMavenVersion>
+                  <version>[3.8,)</version>
+                </requireMavenVersion>
+                <banDuplicatePomDependencyVersions/>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>

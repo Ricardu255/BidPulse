@@ -10,11 +10,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,13 +52,11 @@ class DataSourceConfigTest {
     }
 
     @Test
-    @DisplayName("快照事务：READ ONLY + REPEATABLE_READ，并在连接上执行 SET TRANSACTION READ ONLY")
+    @DisplayName("快照事务：READ ONLY + REPEATABLE_READ，且不再重复下发 SET TRANSACTION READ ONLY")
     void consoleReadTransactionTemplate_isReadOnlyRepeatableRead() throws Exception {
         DataSource dataSource = mock(DataSource.class);
         Connection connection = mock(Connection.class);
-        Statement statement = mock(Statement.class);
         when(dataSource.getConnection()).thenReturn(connection);
-        when(connection.createStatement()).thenReturn(statement);
         when(connection.getTransactionIsolation()).thenReturn(Connection.TRANSACTION_READ_COMMITTED);
 
         TransactionTemplate template = config.consoleReadTransactionTemplate(
@@ -73,7 +71,9 @@ class DataSourceConfigTest {
 
         verify(connection).setReadOnly(true);
         verify(connection).setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
-        verify(statement).executeUpdate("SET TRANSACTION READ ONLY");
+        // 只读池的连接已被 Hikari/Connector/J 设为只读；再显式下发 SET TRANSACTION READ ONLY
+        // 会被驱动当成「只读连接上的写语句」拒绝，事务根本开不起来。
+        verify(connection, never()).createStatement();
         verify(connection).commit();
     }
 
