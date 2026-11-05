@@ -3,7 +3,7 @@ package com.bidpulse.console.api;
 import com.bidpulse.api.ApiResponse;
 import com.bidpulse.api.BizException;
 import com.bidpulse.console.dto.DataView;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,16 +21,22 @@ import java.util.Map;
  *
  * <p>不做通用 SQL 控制台：表名、列名、排序全部在服务端固定，过滤值走占位符，
  * 避免把数据库暴露给前端。
+ *
+ * <p>查询走控制台专用只读连接池，与竞价/消费的主池隔离；即使数据浏览被反复刷新，
+ * 也最多占用 {@code bidpulse.console.read-db.max-pool-size} 个连接。
  */
 @RestController
 @RequestMapping("/console-api/v1/data")
-@RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "bidpulse.console", name = "enabled", havingValue = "true")
 public class ConsoleDataController {
 
     private static final int MAX_LIMIT = 200;
 
     private final JdbcTemplate jdbc;
+
+    public ConsoleDataController(@Qualifier("consoleReadJdbcTemplate") JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
 
     @GetMapping("/{table}")
     public ApiResponse<DataView> query(@PathVariable String table,

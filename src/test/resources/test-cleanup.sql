@@ -6,3 +6,5 @@ DELETE FROM ad         WHERE id   IN (900001, 900002, 900003, 900010, 900011);
 DELETE FROM billing_event   WHERE ad_id IN (900001, 900002, 900003, 900010, 900011);
 DELETE FROM bid_stat_hourly WHERE ad_id IN (900001, 900002, 900003);
 DELETE FROM ad_freq         WHERE ad_id IN (900001, 900002, 900003);
+-- 消费幂等用例专用事件前缀
+DELETE FROM processed_event WHERE event_id LIKE 'it-evt-%';

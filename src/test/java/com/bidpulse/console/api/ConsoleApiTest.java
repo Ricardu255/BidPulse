@@ -106,8 +106,15 @@ class ConsoleApiTest {
     @MockBean
     private ReconReportStore reconReportStore;
 
-    @MockBean
-    private JdbcTemplate jdbcTemplate;
+    /**
+     * Bean 名必须与 ConsoleDataController 的 @Qualifier 一致。
+     *
+     * <p>Spring Boot 3.2 的 {@code @MockBean} 默认不会用字段名做 Bean 名：
+     * 容器里没有同类型 Bean 时走 {@code BeanNameGenerator} 生成名字，按名注入会失败。
+     * 这里显式指定 {@code name}，而不是依赖字段名。
+     */
+    @MockBean(name = "consoleReadJdbcTemplate")
+    private JdbcTemplate consoleReadJdbcTemplate;
 
     @BeforeEach
     void enableConsoleWrite() {

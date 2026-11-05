@@ -1,5 +1,6 @@
 package com.bidpulse.config;
 
+import com.bidpulse.infra.kafka.BidEventPayloadConflictException;
 import com.bidpulse.infra.kafka.InvalidBidEventException;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
@@ -21,7 +22,8 @@ import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
  *   <li><b>可重试故障</b>（DB 超时 / 连接异常）：固定 500ms × 3 次会留出一个尴尬的空档——
  *       500~1500ms 恰好覆盖不住一次稍长的 DB 抖动（如主从切换、连接池重建），事件直接落 DLT；
  *       现在改为指数退避 1s → 2s → 4s → 8s → 16s（总窗口约 31s），把瞬时故障吸收在 DLT 之前；</li>
- *   <li><b>不可重试故障</b>（{@link InvalidBidEventException}：报文无法解析 / 缺少 eventId）：
+ *   <li><b>不可重试故障</b>（{@link InvalidBidEventException}：报文无法解析 / 缺少 eventId；
+ *       {@link BidEventPayloadConflictException}：同一 eventId 对应不同载荷）：
  *       跳过重试，直接投递 DLT。</li>
  * </ul>
  *
@@ -46,8 +48,9 @@ public class KafkaErrorHandlingConfig {
                 (record, ex) -> new TopicPartition(cfg.getDltTopic(), -1));
 
         DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, retryBackOff(cfg));
-        // 报文本身有问题：重试不会成功，跳过重试直接进 DLT
-        handler.addNotRetryableExceptions(InvalidBidEventException.class);
+        // 报文本身有问题 / 同一 eventId 载荷冲突：重试不会成功，跳过重试直接进 DLT。
+        // 冲突异常虽然继承 InvalidBidEventException，这里仍显式登记，避免以后调整继承关系时静默退化为可重试。
+        handler.addNotRetryableExceptions(InvalidBidEventException.class, BidEventPayloadConflictException.class);
         return handler;
     }
 

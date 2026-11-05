@@ -34,7 +34,7 @@ public class FreqAntifraudConsumer extends AbstractBidEventConsumer {
     }
 
     @Override
-    protected void handle(BidEvent e) {
+    protected void handle(BidEvent e, String payloadHash) {
         // 空广告事件（bidpulse.fallback.enabled=false 时的 no-ad 结果）没有广告维度可计数；
         // ad_freq.ad_id 为 NOT NULL，不跳过会让消费组对该事件反复报错重试。
         if (e.getAdId() == null) {

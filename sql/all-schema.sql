@@ -22,7 +22,7 @@
 --   初始化时不要再单独执行，只用本文件。
 --
 -- 与迁移的关系：
---   本 baseline 已包含 sql/migrations/ 下 20261105_01 ~ 06 的全部结构变更，
+--   本 baseline 已包含 sql/migrations/ 下 20261105_01 ~ 07 的全部结构变更，
 --   并在 schema_migration 中记录这些版本；因此全新库执行完本文件后，
 --   再跑迁移脚本只会命中「已存在则跳过」分支，不会重复改结构。
 -- =====================================================================
@@ -135,10 +135,9 @@ CREATE TABLE bid_log (
 -- ---------------------------------------------------------------------
 -- 4. billing_event · 计费事件（M6 旁路由 BillingReconConsumer 写入）
 --    【不可丢数据】涉及金钱，走 Kafka + 消费端幂等落库
---    列结构必须与 BillingReconConsumer 的
---      INSERT INTO billing_event(event_id, ad_id, advertiser_id, pay_price, ts)
---      ON DUPLICATE KEY UPDATE pay_price=VALUES(pay_price)
---    完全一致；event_id 为主键（唯一键）支撑幂等
+--    列结构必须与 BillingReconConsumer 的 INSERT 完全一致；
+--    event_id 为主键（唯一键）支撑幂等；payload_hash 用于拒绝
+--    「同一 event_id、不同载荷」的迟到重放改写金额。
 -- ---------------------------------------------------------------------
 DROP TABLE IF EXISTS billing_event;
 CREATE TABLE billing_event (
@@ -147,6 +146,7 @@ CREATE TABLE billing_event (
   advertiser_id  INT         NULL COMMENT '广告主 ID，关联 ad.advertiser_id',
   pay_price      DECIMAL(12,4) NULL COMMENT '实际扣费',
   ts             BIGINT      NULL COMMENT '事件时间戳（毫秒）',
+  payload_hash   CHAR(64)    NULL COMMENT '规范化载荷 SHA-256，用于拒绝迟到重放改写金额',
   PRIMARY KEY (event_id),
   -- 对账与冷启动重建都按「某广告某日」汇总消耗；没有该索引只能全表扫描
   KEY idx_ad_ts (ad_id, ts)
@@ -171,7 +171,8 @@ CREATE TABLE bid_stat_hourly (
 
 -- ---------------------------------------------------------------------
 -- 6. processed_event · 消费幂等去重（M6 三个消费组共用）
---    INSERT IGNORE 在 (event_id, grp) 已存在时返回 0 影响行数 → 消费者据此跳过
+--    INSERT IGNORE 在 (event_id, grp) 已存在时返回 0 影响行数 → 消费者据此比对载荷：
+--      指纹相同 = 正常重复投递，跳过；指纹不同 = 永久冲突，转 DLT，绝不静默丢弃。
 --    grp 区分消费组：billing-recon / hourly-preagg / freq-antifraud
 --
 --    created_at + idx_created 供保留期清理（ProcessedEventCleaner 每日删除过期行）。
@@ -180,9 +181,10 @@ CREATE TABLE bid_stat_hourly (
 -- ---------------------------------------------------------------------
 DROP TABLE IF EXISTS processed_event;
 CREATE TABLE processed_event (
-  event_id   VARCHAR(64) NOT NULL COMMENT '事件唯一 ID',
-  grp        VARCHAR(32) NOT NULL COMMENT '消费组标识',
-  created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '首次处理时间，供保留期清理',
+  event_id     VARCHAR(64) NOT NULL COMMENT '事件唯一 ID',
+  grp          VARCHAR(32) NOT NULL COMMENT '消费组标识',
+  payload_hash CHAR(64)    NULL COMMENT '规范化载荷 SHA-256；旧版记录为 NULL，消费时回填',
+  created_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '首次处理时间，供保留期清理',
   PRIMARY KEY (event_id, grp),
   KEY idx_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='M6 消费幂等去重（按保留期清理）';
@@ -232,4 +234,5 @@ INSERT IGNORE INTO schema_migration(version, description) VALUES
   ('20261105_03', 'billing_event.idx_ad_ts'),
   ('20261105_04', 'ad.idx_adv'),
   ('20261105_05', 'ad_target.uk_ad_dim'),
-  ('20261105_06', 'audit_log 建表');
+  ('20261105_06', 'audit_log 建表'),
+  ('20261105_07', 'processed_event/billing_event payload_hash');

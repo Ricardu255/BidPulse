@@ -90,3 +90,4 @@ VALUES ('YYYYMMDD_NN', '一句话说明');
 | `20261105_04` | `ad.idx_adv`（管理端按广告主分页） |
 | `20261105_05` | `ad_target.uk_ad_dim`（防重复定向导致二价退化） |
 | `20261105_06` | `audit_log` 建表（早期库缺失时补建） |
+| `20261105_07` | `processed_event` / `billing_event` 增加 `payload_hash`（识别同 eventId 不同载荷） |

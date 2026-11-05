@@ -41,7 +41,7 @@ public class HourlyPreaggConsumer extends AbstractBidEventConsumer {
     }
 
     @Override
-    protected void handle(BidEvent e) {
+    protected void handle(BidEvent e, String payloadHash) {
         // 空广告事件（bidpulse.fallback.enabled=false 时的 no-ad 结果）没有 ad_id。
         // bid_stat_hourly 以 (stat_hour, ad_id) 为主键且 ad_id NOT NULL，
         // 不跳过会让事件因 1048 反复失败、拖住整个分区。

@@ -100,6 +100,36 @@ class BidPulsePropertiesValidationTest {
         assertViolation(props, "bidpulse.kafka.topic");
     }
 
+    @Test
+    void rejectsInvalidConsoleReadPoolSize() {
+        BidPulseProperties zero = new BidPulseProperties();
+        zero.getConsole().getReadDb().setMaxPoolSize(0);
+        assertViolation(zero, "max-pool-size");
+
+        BidPulseProperties tooLarge = new BidPulseProperties();
+        tooLarge.getConsole().getReadDb().setMaxPoolSize(50);
+        assertViolation(tooLarge, "max-pool-size");
+    }
+
+    @Test
+    void rejectsConsoleReadMinIdleAboveMaxPoolSize() {
+        BidPulseProperties props = new BidPulseProperties();
+        props.getConsole().getReadDb().setMaxPoolSize(2);
+        props.getConsole().getReadDb().setMinIdle(3);
+        assertViolation(props, "min-idle 不能大于 max-pool-size");
+    }
+
+    @Test
+    void rejectsInvalidConsoleReadTimeouts() {
+        BidPulseProperties queryTimeout = new BidPulseProperties();
+        queryTimeout.getConsole().getReadDb().setQueryTimeoutSeconds(0);
+        assertViolation(queryTimeout, "query-timeout-seconds");
+
+        BidPulseProperties connectTimeout = new BidPulseProperties();
+        connectTimeout.getConsole().getReadDb().setConnectionTimeoutMs(100);
+        assertViolation(connectTimeout, "connection-timeout-ms");
+    }
+
     private void assertViolation(BidPulseProperties props, String messagePart) {
         Set<ConstraintViolation<BidPulseProperties>> violations = validator.validate(props);
         assertFalse(violations.isEmpty(), "应至少有一条校验失败");

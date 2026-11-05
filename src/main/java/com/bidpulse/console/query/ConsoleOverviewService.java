@@ -5,13 +5,14 @@ import com.bidpulse.console.dto.OverviewView;
 import com.bidpulse.infra.kafka.KafkaLagQueryService;
 import com.bidpulse.console.dto.RecentBidView;
 import com.bidpulse.console.dto.TrendPoint;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.actuate.health.CompositeHealth;
 import org.springframework.boot.actuate.health.HealthComponent;
 import org.springframework.boot.actuate.health.HealthEndpoint;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,6 +23,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 概览页与最近竞价的只读查询。
@@ -35,40 +37,50 @@ import java.util.Map;
  *   <li>Actuator：DB / Redis / Kafka 健康状态。</li>
  * </ul>
  *
- * <p>这些查询只服务控制台，不在竞价热路径上；但都限制时间范围 / 行数，避免全表扫描。
+ * <p><b>快照一致性</b>：概览里的 5 个数据库查询原本各自自动提交，页面可能看到
+ * 「请求数已包含刚成交的一单，消耗却还没算上」的撕裂值。现在它们被放进同一个
+ * REPEATABLE_READ 只读事务（{@code consoleReadTransactionTemplate}），共享一个
+ * 事务快照；Kafka lag 与健康检查在事务外执行，避免外部 RPC 把只读事务拖长。
+ *
+ * <p><b>连接隔离</b>：所有查询走控制台专用只读连接池（{@code consoleReadJdbcTemplate}），
+ * 不再与竞价/消费共享主池。
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ConsoleOverviewService {
 
     private final JdbcTemplate jdbc;
+    private final TransactionTemplate snapshotTx;
     private final KafkaLagQueryService kafkaLagQueryService;
     private final HealthEndpoint healthEndpoint;
     private final BreakerStatusProvider breakerStatusProvider;
+
+    public ConsoleOverviewService(
+            @Qualifier("consoleReadJdbcTemplate") JdbcTemplate jdbc,
+            @Qualifier("consoleReadTransactionTemplate") TransactionTemplate snapshotTx,
+            KafkaLagQueryService kafkaLagQueryService,
+            HealthEndpoint healthEndpoint,
+            BreakerStatusProvider breakerStatusProvider) {
+        this.jdbc = jdbc;
+        this.snapshotTx = snapshotTx;
+        this.kafkaLagQueryService = kafkaLagQueryService;
+        this.healthEndpoint = healthEndpoint;
+        this.breakerStatusProvider = breakerStatusProvider;
+    }
 
     public OverviewView overview() {
         // 统一用 JVM 本地时区计算窗口，避免 MySQL 容器 UTC 与宿主 Asia/Shanghai 混用。
         ZoneId zone = ZoneId.systemDefault();
         LocalDateTime dayStart = LocalDate.now(zone).atStartOfDay();
         long dayStartEpochMillis = dayStart.atZone(zone).toInstant().toEpochMilli();
+        LocalDateTime trendFrom = LocalDateTime.now(zone).minusMinutes(30);
 
-        long[] bids = bidCounts(dayStart);
-        long[] ads = adCounts();
-        BigDecimal spend = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(pay_price), 0) FROM billing_event WHERE ts >= ?",
-                BigDecimal.class, dayStartEpochMillis);
-        long p95 = p95CostMs(dayStart);
+        Snapshot snapshot = Objects.requireNonNull(
+                snapshotTx.execute(status -> loadSnapshot(dayStart, dayStartEpochMillis, trendFrom)),
+                "概览快照事务不应返回 null");
 
-        List<TrendPoint> trend = jdbc.query(
-                "SELECT DATE_FORMAT(bid_at, '%H:%i') AS minute, COUNT(*) AS bids, "
-                        + "COALESCE(SUM(CASE WHEN ad_id = ? THEN 1 ELSE 0 END), 0) AS fallback "
-                        + "FROM bid_log WHERE bid_at >= ? "
-                        + "GROUP BY DATE_FORMAT(bid_at, '%H:%i') ORDER BY MIN(bid_at)",
-                (rs, i) -> new TrendPoint(rs.getString("minute"), rs.getLong("bids"), rs.getLong("fallback")),
-                FallbackAdProvider.STATIC_AD_ID, LocalDateTime.now(zone).minusMinutes(30));
-
-        double fallbackRate = bids[0] == 0 ? 0.0 : (double) bids[1] / bids[0];
+        // Kafka lag / 健康检查放到事务外：AdminClient 最长等 5s，健康检查也可能超时，
+        // 让它们参与事务只会延长只读连接占用时间。
         long kafkaLag;
         try {
             kafkaLag = kafkaLagQueryService.totalLag();
@@ -80,14 +92,17 @@ public class ConsoleOverviewService {
         Map<String, String> health = health();
         health.putAll(breakerStatusProvider.states());
 
+        long[] bids = snapshot.bids();
+        long[] ads = snapshot.ads();
+        double fallbackRate = bids[0] == 0 ? 0.0 : (double) bids[1] / bids[0];
         return new OverviewView(
                 bids[0], bids[1], fallbackRate,
-                spend == null ? BigDecimal.ZERO : spend,
-                p95,
+                snapshot.spend() == null ? BigDecimal.ZERO : snapshot.spend(),
+                snapshot.p95(),
                 ads[0], ads[1], ads[2], ads[3],
                 kafkaLag,
                 health,
-                trend);
+                snapshot.trend());
     }
 
     /**
@@ -108,6 +123,28 @@ public class ConsoleOverviewService {
                         rs.getInt("cost_ms"),
                         rs.getString("bid_at")),
                 cap);
+    }
+
+    private Snapshot loadSnapshot(LocalDateTime dayStart, long dayStartEpochMillis,
+                                  LocalDateTime trendFrom) {
+        long[] bids = bidCounts(dayStart);
+        long[] ads = adCounts();
+        BigDecimal spend = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(pay_price), 0) FROM billing_event WHERE ts >= ?",
+                BigDecimal.class, dayStartEpochMillis);
+        long p95 = p95CostMs(dayStart);
+        List<TrendPoint> trend = trend(trendFrom);
+        return new Snapshot(bids, ads, spend, p95, trend);
+    }
+
+    private List<TrendPoint> trend(LocalDateTime from) {
+        return jdbc.query(
+                "SELECT DATE_FORMAT(bid_at, '%H:%i') AS minute, COUNT(*) AS bids, "
+                        + "COALESCE(SUM(CASE WHEN ad_id = ? THEN 1 ELSE 0 END), 0) AS fallback "
+                        + "FROM bid_log WHERE bid_at >= ? "
+                        + "GROUP BY DATE_FORMAT(bid_at, '%H:%i') ORDER BY MIN(bid_at)",
+                (rs, i) -> new TrendPoint(rs.getString("minute"), rs.getLong("bids"), rs.getLong("fallback")),
+                FallbackAdProvider.STATIC_AD_ID, from);
     }
 
     private long[] bidCounts(LocalDateTime dayStart) {
@@ -160,5 +197,10 @@ public class ConsoleOverviewService {
             out.put("overall", "UNKNOWN");
         }
         return out;
+    }
+
+    /** 同一个 REPEATABLE_READ 快照里读到的五个结果。 */
+    private record Snapshot(long[] bids, long[] ads, BigDecimal spend, long p95,
+                            List<TrendPoint> trend) {
     }
 }

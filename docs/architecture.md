@@ -156,7 +156,9 @@ console-ui/src
 ```text
 前端 → /console-api/v1/** → TokenAuthFilter → controller
   → query/ 只读聚合（概览、预算、Kafka、DLT、数据）
-  → command/ 运维写动作（重放、对账、暂停消费）
+      → consoleReadJdbcTemplate（bidpulse-console-reader 只读池，默认上限 4）
+      → 概览 5 个聚合查询共享一个 REPEATABLE_READ 只读快照事务
+  → command/ 运维写动作（重放、对账、暂停消费，走主池）
   → AuditLogFilter 记录写操作；SecurityConfig 记录 401/403 拒绝
 ```
 
@@ -164,8 +166,12 @@ console-ui/src
 
 ```text
 billing-event / hourly-preagg / freq-antifraud 三个消费组
-  → processed_event(event_id, grp) 幂等
-  → billing_event / bid_stat_hourly / ad_freq
+  → 规范化载荷 SHA-256 指纹
+  → processed_event(event_id, grp, payload_hash) 幂等
+       · 同指纹 → 正常重复投递，跳过并 ack
+       · 不同指纹 → BidEventPayloadConflictException → DLT
+  → billing_event（自存 payload_hash，拒绝迟到重放改写金额）
+  → bid_stat_hourly / ad_freq
   → 失败指数退避 → DLT → DltReplayJob 限量重放
 ```
 
@@ -180,8 +186,10 @@ billing-event / hourly-preagg / freq-antifraud 三个消费组
 | 候选检索 SQL | `infra/persistence/AdMapper` + XML | 注意热路径超时与索引基线 |
 | 兜底行为 | `bid/FallbackAdProvider` | 三级缓存/退避，不是简单静态常量 |
 | Kafka 重试/DLT | `infra/kafka` + `job/DltReplayJob` | 位点与幂等语义不要混 |
+| 计费幂等/载荷冲突 | `infra/kafka/AbstractBidEventConsumer` + `BidEventPayloadHash` | 同 eventId 不同载荷必须转 DLT，不能覆盖账单 |
+| 数据源/只读池 | `config/DataSourceConfig` | 主池 `@Primary`；只读池不注册第二个事务管理器 Bean |
 | 定时任务 | `job/` | `@Scheduled` 与配置项在 `application.yml` |
-| 控制台只读接口 | `console/query` + `console/api` | 避免把聚合写进 controller |
+| 控制台只读接口 | `console/query` + `console/api` | 走 `consoleReadJdbcTemplate`，避免把聚合写进 controller |
 | 控制台运维写操作 | `console/command` + `console/api` | 需要角色校验与审计 |
 | 登录/角色 | `auth/` | 密码从环境变量注入 |
 | 审计 | `audit/` + `sql/all-schema.sql` | 表缺失时只打日志 |
@@ -201,10 +209,10 @@ src/test/java/com/bidpulse
 ├─ auth/                   登录、角色矩阵、安全过滤链
 ├─ audit/                  审计过滤
 ├─ config/                 配置绑定/校验、生产密钥守卫、Kafka 重试、时区
-├─ console/                控制台 REST 契约、查询、CORS
+├─ console/                控制台 REST 契约、查询、CORS、只读池与概览快照
 ├─ testsupport/            IntegrationTestGuard、IntegrationDataSourceGuard、@BidPulseIntegrationTest
 ├─ infra/redis/            预算 Lua、冷启动重建、频次
-├─ infra/kafka/            消费模板错误分类
+├─ infra/kafka/            消费模板错误分类、载荷指纹、计费冲突真库集成测试
 └─ job/                    预算对账、DLT 重放
 ```
 

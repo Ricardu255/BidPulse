@@ -59,7 +59,7 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 - **实时频次控制**：请求可携带可选 `userId`，按「用户 × 广告 × 自然小时」限频（默认 3 次/小时）；频次校验与预算扣减合并在同一个 Lua 内一次原子裁决，超限只跳过候选，不扣预算、不计数、不误标耗尽；匿名流量整段短路，不增加 Redis 操作。
 - **二价（Vickrey）计费**：成交价 = `min(胜出价, 次高价 + 最小加价)`；预算不足的候选自动 fall-through。
 - **超时 + 分层熔断 + 兜底**：总预算 1000ms；DB 超时下沉到 `MAX_EXECUTION_TIME(800)` + MyBatis timeout；Redis 用 Lettuce 200ms；DB / Redis 各自独立熔断；任何失败收敛到兜底广告，绝不返回空。
-- **Kafka 旁路不可丢**：`acks=all` + 幂等生产者 + 手动 ack；三消费组共用 `processed_event` 幂等去重；失败按 1s→2s→4s→8s→16s 指数退避（约 31s）后进入 `bid_event.DLT`；DLT 消息由定时任务限量重放回主主题（带重放次数头，超过上限留待人工）。
+- **Kafka 旁路不可丢**：`acks=all` + 幂等生产者 + 手动 ack；三消费组共用 `processed_event` 幂等去重，并用 SHA-256 载荷指纹区分「正常重投」与「同一 eventId 的恶意/错误改写」——同载荷跳过，不同载荷直接进 DLT，绝不覆盖已有账单；失败按 1s→2s→4s→8s→16s 指数退避（约 31s）后进入 `bid_event.DLT`；DLT 消息由定时任务限量重放回主主题（带重放次数头，超过上限留待人工）。
 - **可丢明细异步落库**：竞价明细走本地有界队列，500 条或 200ms 批量刷盘，队列满直接丢，绝不阻塞主链路。
 - **预算生命周期完整**：检索阶段预热 key、Lua 惰性播种、日预算复位、管理端改预算当天同步 Redis、历史 key 定时清理。
 - **可观测**：Actuator 健康检查、Metrics、Prometheus；消费组 lag 查询接口。
@@ -346,8 +346,10 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 ### 5. Kafka 旁路：至少一次 + 幂等 + 死信
 
 - 生产者：`acks=all` + 幂等 + `max.block.ms=100`（broker 不可达时最多阻塞 100ms，绝不拖住 `/bid`）；
-- 消费模板：`解析 → INSERT IGNORE processed_event(event_id, grp) → 业务写 → 事务提交后 ack`；
-- 错误处理：可重试故障按 1s→2s→4s→8s→16s 指数退避（总窗口约 31s）后投递 `bid_event.DLT`；报文无法解析 / 缺少 `eventId` 直接进 DLT；
+- 消费模板：`解析 → 计算规范化载荷指纹 → INSERT IGNORE processed_event(event_id, grp, payload_hash) → 业务写 → 事务提交后 ack`；
+- **重复 vs 冲突**：指纹相同 = 正常重复投递，跳过并 ack；指纹不同 = 同一 `eventId` 对应了不同业务载荷，抛 `BidEventPayloadConflictException` 转 DLT。`billing_event` 自己也保存 `payload_hash`，即使 `processed_event` 过保留期被清理，迟到的重放也只能命中同一行，不能改写金额；
+- 指纹编码固定字段顺序、字符串带长度前缀、`BigDecimal` 先 `stripTrailingZeros`，因此 `0.0200` 与 `0.02` 不会被误判为冲突；改变字段集合必须升级编码版本；
+- 错误处理：可重试故障按 1s→2s→4s→8s→16s 指数退避（总窗口约 31s）后投递 `bid_event.DLT`；报文无法解析 / 缺少 `eventId` / 载荷冲突直接进 DLT；
 - DLT 重放：默认每 5 分钟拉取一批（单轮上限 1000 条 / 10s），可解析且未超过重放上限的消息同步投回主主题并写入 `x-replay-count` 头；发不出去就不提交位点，下一轮重试；不可解析 / 超限消息跳过并保留在 DLT 待人工处理；
 - 消费组：`hourly-preagg`（小时聚合）、`billing-recon`（计费流水）、`freq-antifraud`（频次反作弊）；
 - 去重表按保留期（默认 8 天，须不短于 Kafka `retention.ms`）每日分批清理。
@@ -381,6 +383,18 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 
 `TargetingResolver` 把原始画像映射为 `ad_target.dim_value`：7 个年龄桶（`18-24 … 51+`）、`male/female/unknown`。
 `seed-demo.sql` 与 `tools/gen_ad_data.py` 使用同一套桶定义；演示造数覆盖全部 105 种检索组合。
+
+### 10. 控制台：只读连接池与概览快照
+
+- **连接隔离**：控制台不再与竞价/消费共享主池。`DataSourceConfig` 注册第二个 Hikari 池
+  `bidpulse-console-reader`（默认上限 4），控制台查询走 `consoleReadJdbcTemplate`；
+  即使概览被反复刷新或数据浏览被误用，也最多占用 4 个连接，不会把竞价请求堵在 `connection-timeout` 上。
+- **只读三层保证**：池级 `readOnly=true`（连接初始化时执行 `SET SESSION TRANSACTION READ ONLY`）
+  + 事务级 `SET TRANSACTION READ ONLY`（`DataSourceTransactionManager#setEnforceReadOnly`）
+  + `JdbcTemplate.queryTimeout=2s`（语句级）。误写会被数据库直接拒绝，慢报表也不会长时间占住连接。
+- **概览快照**：概览页的请求数、兜底数、消耗、P95、近 30 分钟趋势在同一个
+  `REPEATABLE_READ` 只读事务里读取，避免并发写入时拼出「请求数已更新、消耗还没更新」的自相矛盾数字；
+  Kafka lag 与 Actuator 健康检查在事务外执行，外部 RPC 不会拖长只读事务。
 
 ---
 
@@ -421,6 +435,10 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 | `bidpulse.frequency.enabled` | `true` | 实时频次控制总开关 |
 | `bidpulse.frequency.max-per-hour` | `3` | 每用户每广告每自然小时最大成交次数 |
 | `bidpulse.frequency.key-ttl-seconds` | `7200` | 频次 key TTL（2 小时） |
+| `bidpulse.console.read-db.max-pool-size` | `4` | 控制台只读池上限（与主池隔离） |
+| `bidpulse.console.read-db.min-idle` | `1` | 控制台只读池常驻连接数 |
+| `bidpulse.console.read-db.connection-timeout-ms` | `3000` | 只读池取连接超时 |
+| `bidpulse.console.read-db.query-timeout-seconds` | `2` | 控制台单条查询超时 |
 
 完整配置项、默认值与注释见 `src/main/resources/application.yml` 与 `BidPulseProperties`。
 
@@ -439,6 +457,7 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 | `BIDPULSE_AUTH_SECRET` | 空 | 生产必填 |
 | `BIDPULSE_ADMIN_PASSWORD` 等 | 空 | 生产需为所有已配置账号设置密码（默认 admin/operator/viewer） |
 | `BIDPULSE_HEALTH_DETAILS` | `when-authorized` | 本地排障可临时设 `always` |
+| `BIDPULSE_CONSOLE_READ_MAX_POOL_SIZE` / `MIN_IDLE` / `CONNECT_TIMEOUT_MS` / `QUERY_TIMEOUT_SECONDS` | `4` / `1` / `3000` / `2` | 控制台只读池容量与超时 |
 | `BIDPULSE_IT` | 未设置 | 集成测试开关，必须显式设为 `true` |
 
 - `.env.example` 是模板；**Spring Boot 不会自动读取 `.env`**，需要 `export`、`docker --env-file` 或 systemd `EnvironmentFile`。
@@ -505,7 +524,7 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 mvn test
 ```
 
-默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 95 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算。
+默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 114 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算。
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
@@ -513,7 +532,7 @@ mvn test
 
 ### 集成测试（需要中间件）
 
-`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）与 `AdAdminTransactionTest`（2，预算变更事务回滚/提交），共 32 个用例。
+`BidFlowTest`（5，竞价端到端 + 三消费组落库 + 频次超限不误标耗尽）、`BudgetServiceTest`（19，Lua 扣减、冷启动重建、预算同步 + 7 个频次用例）、`BudgetReconJobTest`（3，预算对账）、`DltReplayAdminServiceTest`（3，真 Kafka 单条重放/非法报文/越界位点）、`AdAdminTransactionTest`（2，预算变更事务回滚/提交）、`BillingPayloadConflictTest`（5，重复投递/载荷冲突/去重记录过期后的迟到重放/旧账单指纹回填/并发重复投递）与 `ConsoleReadPoolTest`（4，双池隔离/只读拒写/只读事务拒写/概览真实查询），共 41 个用例。
 
 这些类统一使用 `testsupport/BidPulseIntegrationTest`，隔离分三层：
 
@@ -538,7 +557,7 @@ BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
 mvn test -Pfull-tests
 ```
 
-加上 95 个纯单测，全量为 127 个用例。
+加上 114 个纯单测，全量为 155 个用例。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
 > 带点的 `-D` 参数会在第一个点处被拆开，Maven 报 `Unknown lifecycle phase '.excludedGroups=none'`。

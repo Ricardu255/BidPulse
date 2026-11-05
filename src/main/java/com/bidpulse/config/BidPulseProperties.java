@@ -329,6 +329,37 @@ public class BidPulseProperties {
         private boolean enabled = false;
         /** 是否允许暂停/恢复消费等写操作；只读查询不受影响 */
         private volatile boolean allowWrite = false;
+        @Valid
+        private ReadDb readDb = new ReadDb();
+
+        /**
+         * 控制台只读连接池。容量刻意远小于主池：控制台是旁路，
+         * 不允许它把竞价/消费的连接占满。
+         */
+        @Data
+        public static class ReadDb {
+            /** 只读池最大连接数 */
+            @Min(value = 1, message = "bidpulse.console.read-db.max-pool-size 必须在 1~20 之间")
+            @Max(value = 20, message = "bidpulse.console.read-db.max-pool-size 必须在 1~20 之间")
+            private int maxPoolSize = 4;
+            /** 常驻空闲连接数；必须不大于最大连接数 */
+            @Min(value = 0, message = "bidpulse.console.read-db.min-idle 必须在 0~20 之间")
+            @Max(value = 20, message = "bidpulse.console.read-db.min-idle 必须在 0~20 之间")
+            private int minIdle = 1;
+            /** 取连接超时（ms）；控制台宁可快速失败，也不长时间占住 Tomcat 线程 */
+            @Min(value = 500, message = "bidpulse.console.read-db.connection-timeout-ms 必须在 500~10000 之间")
+            @Max(value = 10000, message = "bidpulse.console.read-db.connection-timeout-ms 必须在 500~10000 之间")
+            private long connectionTimeoutMs = 3000;
+            /** 单条查询超时（秒） */
+            @Min(value = 1, message = "bidpulse.console.read-db.query-timeout-seconds 必须在 1~30 之间")
+            @Max(value = 30, message = "bidpulse.console.read-db.query-timeout-seconds 必须在 1~30 之间")
+            private int queryTimeoutSeconds = 2;
+
+            @AssertTrue(message = "bidpulse.console.read-db.min-idle 不能大于 max-pool-size")
+            public boolean isMinIdleValid() {
+                return minIdle <= maxPoolSize;
+            }
+        }
     }
 
     /**
