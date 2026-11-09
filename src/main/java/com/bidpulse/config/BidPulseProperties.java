@@ -170,6 +170,14 @@ public class BidPulseProperties {
         @Min(value = 1, message = "bidpulse.kafka.partitions 必须在 1~100 之间")
         @Max(value = 100, message = "bidpulse.kafka.partitions 必须在 1~100 之间")
         private int partitions = 3;
+        /**
+         * 主题副本数。demo 单节点必须为 1；生产多 broker 设为 3。
+         * 副本数 ≥3 时，KafkaTopicConfig 会自动给主题加 {@code min.insync.replicas=2}，
+         * 让 {@code acks=all} 真正具备「至少一个副本落盘」的防丢语义（RF=1 时 all 等价于 1）。
+         */
+        @Min(value = 1, message = "bidpulse.kafka.replicas 必须在 1~10 之间")
+        @Max(value = 10, message = "bidpulse.kafka.replicas 必须在 1~10 之间")
+        private int replicas = 1;
 
         // ---- 消费端重试：指数退避，尽量在进入 DLT 前吸收瞬时 DB 抖动 ----
         /** 首次重试间隔（ms） */

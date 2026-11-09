@@ -55,7 +55,7 @@ BidPulse 是一个 **RTB（Real-Time Bidding，实时竞价）广告投放引擎
 
 ## 一、核心特性
 
-- **候选检索下推 SQL**：`ad JOIN ad_target` 多维求交，`ORDER BY bid DESC LIMIT 50` 全部在 SQL 内完成，热路径只回传竞价必需字段。
+- **候选检索下推 SQL**：`ad JOIN ad_target` 多维求交，`ORDER BY bid DESC LIMIT 50` 全部在 SQL 内完成；只查 `ad` 表、不回传定向行，一次最多返回 50 条候选。
 - **Redis Lua 原子扣减**：余额校验、扣减、累计消耗收进一个脚本，消除并发超扣；金额统一以「分」为单位，成交价显式量化到分。
 - **实时频次控制**：请求可携带可选 `userId`，按「用户 × 广告 × 自然小时」限频（默认 3 次/小时）；频次校验与预算扣减合并在同一个 Lua 内一次原子裁决，超限只跳过候选，不扣预算、不计数、不误标耗尽；匿名流量整段短路，不增加 Redis 操作。
 - **二价（Vickrey）计费**：成交价 = `min(胜出价, 次高价 + 最小加价)`；预算不足的候选自动 fall-through。
@@ -331,7 +331,7 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 ### 1. 候选检索：把排序与限流下推 SQL
 
 `ad JOIN ad_target` 按地域 / 年龄段 / 性别求交，`ORDER BY a.bid DESC LIMIT 50` 在 SQL 内完成。
-`ad_target` 的 `idx_dim_lookup(dim_type, dim_value, ad_id)` 承担「筛得准」，热路径只回传竞价必需字段；
+`ad_target` 的 `idx_dim_lookup(dim_type, dim_value, ad_id)` 承担「筛得准」，SQL 只查 `ad` 表、不回传定向行，一次最多返回 50 条候选；
 `ad` 表在检索路径上刻意不建索引（已有的 `idx_adv` 只服务管理端列表），用于保留全表扫描基线做性能对照。
 
 ### 2. 二价定价：金额口径统一到「分」
@@ -370,6 +370,7 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 - 指纹编码固定字段顺序、字符串带长度前缀、`BigDecimal` 先 `stripTrailingZeros`，因此 `0.0200` 与 `0.02` 不会被误判为冲突；改变字段集合必须升级编码版本；
 - 错误处理：可重试故障按 1s→2s→4s→8s→16s 指数退避（总窗口约 31s）后投递 `bid_event.DLT`；报文无法解析 / 缺少 `eventId` / 载荷冲突直接进 DLT；
 - DLT 重放：默认每 5 分钟拉取一批（单轮上限 1000 条 / 10s），可解析且未超过重放上限的消息同步投回主主题并写入 `x-replay-count` 头；发不出去就不提交位点，下一轮重试；不可解析 / 超限消息跳过并保留在 DLT 待人工处理；
+- 旁路可观测：发送失败计数 `bidpulse.kafka.publish.failures`（fire-and-forget 不抛异常，但失败量在 Prometheus 可见）；DLT 重放计数 `bidpulse.kafka.dlt.replay`；三组消费 lag 可在控制台「Kafka」页查看；
 - 消费组：`hourly-preagg`（小时聚合）、`billing-recon`（计费流水）、`freq-antifraud`（频次反作弊）；
 - 去重表按保留期（默认 8 天，须不短于 Kafka `retention.ms`）每日分批清理。
 
@@ -507,6 +508,7 @@ VIEWER 只读；OPERATOR 可执行控制台写操作；ADMIN 额外可写 `/admi
 | `BIDPULSE_REDIS_HOST` / `PORT` / `DATABASE` | `127.0.0.1` / `6379` / `0` | 集成测试用 `1..15` |
 | `BIDPULSE_KAFKA_BOOTSTRAP` | `127.0.0.1:9092` | Kafka broker |
 | `BIDPULSE_KAFKA_TOPIC` / `BIDPULSE_KAFKA_DLT_TOPIC` | `bid_event` / `bid_event.DLT` | 集成测试用 `bidpulse_it_*` |
+| `BIDPULSE_KAFKA_REPLICAS` | `1` | 主题副本数；设为 3 时自动加 `min.insync.replicas=2` |
 | `BIDPULSE_AUTH_SECRET` | 空 | 生产必填 |
 | `BIDPULSE_ADMIN_PASSWORD` 等 | 空 | 生产需为所有已配置账号设置密码（默认 admin/operator/viewer） |
 | `BIDPULSE_HEALTH_DETAILS` | `when-authorized` | 本地排障可临时设 `always` |
@@ -579,7 +581,7 @@ src/test/java/com/bidpulse         测试包与主代码一一对应
 mvn test
 ```
 
-默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 162 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算、决策轨迹构建与查询边界、幂等键首放/重复/超长/fail-open、数据浏览白名单与参数化 SQL、ArchUnit 分层规则、迁移命名/记录/文档一致性、源码卫生（无 `System.out` / `printStackTrace`）、前端轮询控制器不重叠与最新优先。
+默认通过 `@Tag("integration")` 排除所有需要中间件的用例，共 168 个，覆盖：二价定价边界、配置绑定与 Bean Validation、生产密钥守卫、集成测试守卫、Sentinel 熔断语义、消费模板错误分类与载荷冲突/旧记录回填、载荷指纹稳定性（金额 scale / null vs 空串 / 字段变化）、只读池接线与快照事务语义、HTTP 404/415、兜底广告缓存、Kafka 指数退避参数、Kafka 发送失败计数、主题副本与 min.insync.replicas 策略、生产者 acks=all/幂等语义锁、DLT 重放头/跳过/位点语义、控制台 REST 契约、写开关 403、实验开关原子性、只改日预算与只读查询边界、CORS 注册、测试 JVM 东八区守卫、登录/角色矩阵/审计过滤、预算 key 与金额换算、决策轨迹构建与查询边界、幂等键首放/重复/超长/fail-open、数据浏览白名单与参数化 SQL、ArchUnit 分层规则、迁移命名/记录/文档一致性、源码卫生（无 `System.out` / `printStackTrace`）、前端轮询控制器不重叠与最新优先。
 
 > 注意：用 `-Dtest=<类名>` 单独指定**集成测试类**时，也必须同时激活全量 profile，
 > 否则 surefire 会跑 0 个用例并返回 BUILD SUCCESS：
@@ -612,7 +614,7 @@ BIDPULSE_KAFKA_DLT_TOPIC=bidpulse_it_bid_event.DLT \
 mvn verify -Pfull-tests
 ```
 
-加上 162 个纯单测，全量为 206 个用例。`verify` 还会执行 JaCoCo 覆盖率门禁与
+加上 168 个纯单测，全量为 212 个用例。`verify` 还会执行 JaCoCo 覆盖率门禁与
 SpotBugs 静态扫描（阈值与排除规则见 `pom.xml` / `config/spotbugs-exclude.xml`）。
 
 > 用 `-Pfull-tests` 而不是 `-Dsurefire.excludedGroups=none`：Windows 下由 PowerShell 调用 `mvn.cmd` 时，
@@ -722,7 +724,7 @@ python tools/bench_fallback.py --port 8081 --n 2000 --mode nocand --tag "S2-候�
 ## 十二、边界与诚实标注
 
 - **单实例假设**：本地熔断器、预算预热缓存均为实例级；多实例部署需改为共享状态（如 Redis / Sentinel 集群规则）。
-- **单节点 Kafka**：demo 使用 RF=1；生产应为 RF=3 + `min.insync.replicas=2`。
+- **单节点 Kafka**：demo 使用 RF=1；生产设 `BIDPULSE_KAFKA_REPLICAS=3`（默认 1），启动建主题时会自动设置 `min.insync.replicas=2`，让 `acks=all` 具备多副本防丢语义。`acks=all` 与幂等生产者由 `application.yml` 固定，并由 `KafkaProducerSemanticsTest` 锁定，防止被顺手改回 1。
 - **频次维度简化**：实时频次控制覆盖「用户 × 广告 × 自然小时」，但 `userId` 由调用方传入，匿名流量不控频；固定窗口在整点边界存在突刺；被限频候选仍参与二价估价。`freq-antifraud` 消费组在 MySQL 的 `ad_freq` 表按 `ad_id` 累加的是离线触达报表，不承担实时拦截。
 - **死信有限自动重放**：`bid_event.DLT` 由定时任务每 5 分钟限量重放（可解析且未超过 3 次的消息），报文非法或超限的消息保留在 DLT 等人工处理；重放依靠 `processed_event` 幂等，不会重复计费。
 - **去重表清理是安全网**：极高事件量下应改为按时间分区 / `DROP PARTITION`，逐行删除只适合本项目的数据规模。

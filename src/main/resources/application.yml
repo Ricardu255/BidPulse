@@ -193,6 +193,9 @@ bidpulse:
     # 死信主题：消费重试耗尽 / 报文不可解析的事件落点（KafkaErrorHandlingConfig）
     dlt-topic: ${BIDPULSE_KAFKA_DLT_TOPIC:bid_event.DLT}
     partitions: 3
+    # 主题副本数：单节点 demo 为 1；生产多 broker 设 3（>=3 时自动加 min.insync.replicas=2，
+    # 让 acks=all 真正防丢；RF=1 时 acks=all 与 1 等价）
+    replicas: ${BIDPULSE_KAFKA_REPLICAS:1}
     # 消费端指数退避：1s → 2s → 4s → 8s → 16s（总窗口约 31s）。
     # 把瞬时 DB 抖动吸收在进入 DLT 之前；只有持续故障才落 DLT。
     retry-initial-ms: 1000

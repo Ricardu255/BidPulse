@@ -22,7 +22,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!--
       集成测试分层：BidFlowTest / BudgetServiceTest 真连 MySQL + Redis + Kafka，
-      打 @Tag("integration")。默认 mvn test 只跑 8 个纯单测（29 个用例），没有中间件也能全绿；
+      打 @Tag("integration")。默认 mvn test 只跑 37 个纯单测（168 个用例），没有中间件也能全绿；
       跑全量用 profile（不要用 -Dsurefire.excludedGroups=...：Windows PowerShell 调 mvn.cmd 时
       带点的 -D 参数会在第一个点处被拆开，Maven 会报 "Unknown lifecycle phase '.excludedGroups=none'"）：
         mvn test -Pfull-tests

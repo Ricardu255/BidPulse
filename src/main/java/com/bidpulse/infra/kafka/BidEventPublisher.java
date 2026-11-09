@@ -1,6 +1,7 @@
 package com.bidpulse.infra.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -15,21 +16,28 @@ import com.bidpulse.event.BidEvent;
  *   <li>仅把消息交给 Kafka 生产者缓冲即返回，不等 broker 确认，不增加 {@code /bid} 延迟；</li>
  *   <li>整个发送包在 try-catch 中，Kafka 挂了 / 序列化失败 / 超时都只记日志，<b>绝不抛异常、绝不阻塞返回</b>；</li>
  *   <li>分区键 = adId（兜底用 "fallback"），保证同一广告的事件落同一分区、严格有序。</li>
+ *   <li>失败只计数 + 记日志（不走异常），失败量由 {@link #PUBLISH_FAILURES_METRIC} 上报 Prometheus。</li>
  * </ul>
  */
 @Slf4j
 @Component
 public class BidEventPublisher {
 
+    /** 发送失败计数：旁路不阻塞主链路，但失败量必须可被监控发现。 */
+    static final String PUBLISH_FAILURES_METRIC = "bidpulse.kafka.publish.failures";
+
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final MeterRegistry meterRegistry;
     private final String topic;
 
     public BidEventPublisher(KafkaTemplate<String, String> kafkaTemplate,
                             ObjectMapper objectMapper,
+                            MeterRegistry meterRegistry,
                             @Value("${bidpulse.kafka.topic:bid_event}") String topic) {
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
+        this.meterRegistry = meterRegistry;
         this.topic = topic;
     }
 
@@ -40,13 +48,20 @@ public class BidEventPublisher {
             // CompletableFuture：发送失败仅记日志，绝不抛异常、不影响主链路
             kafkaTemplate.send(topic, key, value).whenComplete((result, ex) -> {
                 if (ex != null) {
+                    countPublishFailure();
                     log.warn("发送竞价事件失败（旁路忽略，不影响竞价返回）eventId={}: {}",
                             event.getEventId(), ex.getMessage());
                 }
             });
         } catch (Exception e) {
             // 序列化等异常同样被忽略，保证主链路不受旁路故障牵连
+            countPublishFailure();
             log.warn("构造竞价事件异常（旁路忽略）eventId={}: {}", event.getEventId(), e.getMessage());
         }
+    }
+
+    /** 旁路失败不抛异常，只计数；计数器 > 0 说明 Kafka 链路需要排查。 */
+    private void countPublishFailure() {
+        meterRegistry.counter(PUBLISH_FAILURES_METRIC).increment();
     }
 }
