@@ -14,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>职责：按 {@code ad_id} 累计曝光频次，落 {@code ad_freq}，用于识别异常曝光行为。
  *
- * <p><b>维度简化说明（诚实标注）</b>：当前 {@code BidRequest} 无 userId，
- * 无法按"用户"维度统计频次，此处退而按 {@code ad_id} 维度计数（消费组/幂等/lag 机制完全真实，
- * 仅聚合维度简化）。真实生产应按 userId 维度。
+ * <p><b>维度简化说明（诚实标注）</b>：业务频控在 Redis 中按「用户 × 广告 × 自然小时」计数
+ * （见 {@code freq:u:{userId}:{yyyyMMddHH}}），本消费组落库的 {@code ad_freq} 则简化为
+ * 按 {@code ad_id} 维度累计曝光，用于广告级异常曝光识别。事件本身已带 {@code userId}
+ * （见 {@link com.bidpulse.event.BidEvent}），真实生产如需按用户维度做反作弊可直接扩展，
+ * 消费组 / 幂等去重 / lag 机制完全真实。
  *
  * <p>幂等与位点语义由 {@link AbstractBidEventConsumer} 统一处理。
  */
