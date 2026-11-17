@@ -101,12 +101,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # 需要 HEAD^ 做 diff 检查；默认 depth=1 时父提交不存在
-          fetch-depth: 2
+          # 空白检查要拿到推送前/PR 基线提交，浅克隆会让 git cat-file 失败
+          fetch-depth: 0
 
       - name: Check whitespace errors
-        # 检查本次提交是否引入行尾空格 / 空格缩进等空白问题
-        run: git diff --check HEAD^ HEAD
+        # 检查本次推送/PR 引入的空白问题。
+        # 不能用 HEAD^：一次推送多个提交时只检查最后一个，前面的提交漏检；
+        # 新分支或 force-push 后 event.before 可能不存在，则退回 HEAD^，再不行就跳过。
+        run: |
+          set -euo pipefail
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+            echo "基线提交不可用，退回 HEAD^（$base）"
+          fi
+          if [ -z "$base" ]; then
+            echo "仓库只有一个提交，跳过空白检查"
+            exit 0
+          fi
+          git diff --check "$base" HEAD
 
       - name: Scan for secrets
         run: bash tools/check-secrets.sh
@@ -126,6 +139,12 @@ jobs:
       - name: Init integration-test database
         # 建 bidpulse_it 库 → baseline → 全部迁移（迁移必须幂等，否则这里会失败）
         run: bash tools/init-it-db.sh
+
+      - name: Rehearse migrations against a legacy schema
+        # 上面那步是先建新版 baseline 再跑迁移，守卫全部命中、ALTER 分支永远不执行。
+        # 这里先把结构退回「迁移之前」的老库，再真正跑一遍升级路径：
+        # 引号转义、ALGORITHM=INPLACE 兼容性、唯一键撞重复行，只在这条路径上才会暴露。
+        run: bash tools/verify-migrations.sh
 
       - name: Verify test timezone
         # 防止 runner 或镜像悄悄退回 UTC；+0800 才继续往下跑。
@@ -172,7 +191,10 @@ jobs:
           APP_PID=$!
           trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"'; then
+            # 不能匹配 '"status":"UP"'：Jackson 是否输出空格取决于版本与配置，
+            # 一旦序列化格式变化，这里会一直等到 180s 超时才报错，掩盖真实原因。
+            if curl -fsS http://127.0.0.1:8080/actuator/health \
+              | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
               echo "health UP after ${i} attempts"
               exit 0
             fi
@@ -342,7 +364,8 @@ jobs:
           java -jar target/bidpulse-engine-*.jar > app.log 2>&1 &
           echo $! > app.pid
           for i in $(seq 1 90); do
-            if curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '"status":"UP"'; then
+            if curl -fsS http://127.0.0.1:8080/actuator/health \
+              | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
               echo "backend UP after ${i} attempts"
               exit 0
             fi
@@ -410,11 +433,35 @@ jobs:
 
   release-gate:
     # 单一稳定门禁：分支保护只需要勾选这一个 check。
-    # 后端、前端、真实链路任一失败，本 job 都不会执行，整体状态即失败。
+    # 注意：needs 里的 job 失败或被取消时，本 job 默认根本不会执行，状态是 skipped，
+    # 而 GitHub 的分支保护把 skipped 当成通过 —— 于是「必需检查」形同虚设。
+    # 因此必须 if: always() 强制执行，并在 steps 里显式校验每个上游结果。
     name: release-gate
     needs: [backend, console-ui, console-e2e-live]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: All required jobs passed
-        run: echo "backend + console-ui passed; ready to merge/release."
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS='=' read -r job result; do
+            [ -z "$job" ] && continue
+            echo "$job => $result"
+            case "$result" in
+              success) ;;
+              *)
+                echo "::error::必需 job 「$job」的结果是 $result，不能合并/发布。"
+                failed=1
+                ;;
+            esac
+          done <<EOF
+          backend=${{ needs.backend.result }}
+          console-ui=${{ needs.console-ui.result }}
+          console-e2e-live=${{ needs.console-e2e-live.result }}
+          EOF
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+          echo "backend + console-ui + console-e2e-live 全部通过；可以合并/发布。"

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import FilterBar from '@/components/FilterBar.vue'
 import MetricCard from '@/components/MetricCard.vue'
 import { getReconReport, runRecon } from '@/api/console'
+import { idempotencyKey } from '@/api/idempotency'
 import type { ReconReport } from '@/api/types'
 import { cents, errorText } from '@/format'
 import { hasRole } from '@/auth'
@@ -12,6 +13,9 @@ const canWrite = hasRole('OPERATOR', 'ADMIN')
 const recon = ref<ReconReport | null>(null)
 const reconLoading = ref(false)
 const reconRunning = ref(false)
+
+// 一次「立即对账」意图一个键：失败重按复用，成功后换新，双击不会跑两轮对账。
+const reconKey = idempotencyKey()
 
 function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
@@ -73,7 +77,8 @@ async function triggerRecon(): Promise<void> {
       { type: 'warning', confirmButtonText: '开始对账', cancelButtonText: '取消' },
     )
     reconRunning.value = true
-    recon.value = await runRecon()
+    recon.value = await runRecon(reconKey.current())
+    reconKey.reset()
     ElMessage.success('对账完成')
   } catch (e) {
     if (e === 'cancel' || e === 'close') return

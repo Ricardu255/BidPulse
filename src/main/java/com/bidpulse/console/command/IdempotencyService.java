@@ -53,14 +53,15 @@ public class IdempotencyService {
         try {
             Boolean first = redis.opsForValue().setIfAbsent(redisKey, "1", TTL);
             if (Boolean.FALSE.equals(first)) {
-                throw BizException.conflict("重复请求：该 Idempotency-Key 已在 10 分钟内执行过");
+                // 「失败不释放」：上次抛异常的 key 也还在窗口内，所以说「使用过」而不是「执行过」
+                throw BizException.conflict("重复请求：该 Idempotency-Key 已在 10 分钟内使用过（无论上次是否成功）");
             }
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
-            // fail-open：幂等是增强能力，Redis 故障不应让运维入口整体不可用
-            log.warn("幂等键检查失败（fail-open，继续执行）scope={} key={}: {}",
-                    scope, trimmed, e.getMessage());
+            // fail-open：幂等是增强能力，Redis 故障不应让运维入口整体不可用。
+            // 保留堆栈：序列化/编码错误与「Redis 抖动」表现相同，丢掉 cause 就无法定位。
+            log.warn("幂等键检查失败（fail-open，继续执行）scope={} key={}", scope, trimmed, e);
         }
     }
 }

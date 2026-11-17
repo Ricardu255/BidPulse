@@ -6,9 +6,11 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.kafka.support.Acknowledgment;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -136,6 +138,21 @@ class AbstractBidEventConsumerTest {
                     return 1;
                 }
                 return 0;
+            }
+            throw new UnsupportedOperationException("未预期的 SQL: " + sql);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> List<T> query(String sql, RowMapper<T> rowMapper, Object... args) {
+            if (sql.startsWith("SELECT payload_hash FROM processed_event")) {
+                String mapKey = key(args[0], args[1]);
+                if (!hashes.containsKey(mapKey)) {
+                    // 行已被清理：模拟真实 SQL 的「查不到」
+                    return List.of();
+                }
+                // 旧记录物化出来的就是 NULL 指纹，SQL 会返回一行 [null] 而不是没有行
+                return (List<T>) Collections.singletonList(hashes.get(mapKey));
             }
             throw new UnsupportedOperationException("未预期的 SQL: " + sql);
         }

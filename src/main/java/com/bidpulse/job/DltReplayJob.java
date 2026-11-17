@@ -253,8 +253,15 @@ public class DltReplayJob {
     private boolean parseable(String value) {
         try {
             BidEvent event = objectMapper.readValue(value, BidEvent.class);
+            // 报文可能正好是字面量 "null"：readValue 不抛异常而是返回 null，
+            // 直接取 eventId 会 NPE 并把整轮重放卡死（位点不提交）。
+            if (event == null) {
+                return false;
+            }
             return event.getEventId() != null && !event.getEventId().isBlank();
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
+            // 与 AbstractBidEventConsumer#parse 保持一致：任何解析失败都算「不可解析」，
+            // 不能让 Jackson 之外的类型（如 NPE）冒泡成投递失败。
             return false;
         }
     }

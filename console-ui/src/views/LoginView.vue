@@ -42,14 +42,15 @@ async function submit(): Promise<void> {
           </div>
         </div>
 
-        <div style="margin-top: clamp(42px, 9vh, 96px)">
+        <div class="login-intro-body">
           <p class="login-scope">DSP · RTB · 投放运营</p>
           <h1>看见每一次<br />出价与消耗</h1>
           <p class="login-intro-copy">
             从竞价请求、预算裁决到 Kafka 账单与 DLT 重放，在一个工作台里核对每一次决策。
           </p>
 
-          <div class="login-flow" aria-label="竞价流程">
+          <!-- role="group" 让 aria-label 真正生效：普通 div 上的 aria-label 会被多数读屏器忽略 -->
+          <div class="login-flow" role="group" aria-label="竞价流程">
             <div class="login-flow-row">
               <span>01</span>
               <div><strong>候选检索</strong><small>地域、年龄、性别与类目命中</small></div>
@@ -66,7 +67,7 @@ async function submit(): Promise<void> {
         </div>
       </div>
 
-      <div class="login-facts" aria-label="系统能力">
+      <div class="login-facts" role="group" aria-label="系统能力">
         <div class="login-fact">
           <strong>Lua 原子预算</strong>
           <span>并发扣减不超卖</span>

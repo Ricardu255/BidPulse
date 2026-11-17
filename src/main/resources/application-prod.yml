@@ -5,7 +5,11 @@ management:
   endpoint:
     health:
       # 匿名探针只看 status；DB/Redis/Kafka 细节仅 ADMIN 可见。
+      # show-details=when-authorized 在 roles 为空时退化成「任何已认证用户」，
+      # 而 /actuator/health 是 permitAll，VIEWER/OPERATOR 也能看到组件详情，
+      # 所以必须显式声明 roles。比较的是 "ROLE_" + role，与 Role.authority() 对齐。
       show-details: when-authorized
+      roles: ADMIN
   endpoints:
     web:
       exposure:

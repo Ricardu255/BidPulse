@@ -69,7 +69,11 @@ public class ConsoleDataQueryService {
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder(
                 "SELECT event_id, ad_id, advertiser_id, pay_price, ts, "
-                        + "FROM_UNIXTIME(ts / 1000) AS event_time FROM billing_event WHERE 1=1");
+                        // 直接在 SQL 里格式化成字符串：DATETIME 列经 JdbcTemplate 变 java.sql.Timestamp，
+                        // Jackson 会按 UTC 序列化成 2026-11-17T04:08:00.000+00:00，
+                        // 前端再截掉时区就会少 8 小时——诊断页正靠这列对齐计费与消费事件。
+                        + "DATE_FORMAT(FROM_UNIXTIME(ts / 1000), '%Y-%m-%d %H:%i:%s') AS event_time "
+                        + "FROM billing_event WHERE 1=1");
         if (adId != null) {
             sql.append(" AND ad_id = ?");
             args.add(adId);
@@ -114,7 +118,8 @@ public class ConsoleDataQueryService {
         return new DataView("processed_event",
                 List.of("event_id", "grp", "created_at"),
                 jdbc.queryForList(
-                        "SELECT event_id, grp, created_at FROM processed_event "
-                                + "ORDER BY created_at DESC LIMIT ?", limit));
+                        // 同 billingEvent：DATETIME 交给 Jackson 会按 UTC 输出，这里直接格式化成字符串。
+                        "SELECT event_id, grp, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at "
+                                + "FROM processed_event ORDER BY created_at DESC LIMIT ?", limit));
     }
 }

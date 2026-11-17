@@ -112,14 +112,14 @@ export function getKafkaGroups(): Promise<KafkaGroupView[]> {
   return request<KafkaGroupView[]>('/kafka/groups')
 }
 
-export function pauseConsumers(): Promise<{ status: string }> {
+export function pauseConsumers(idempotencyKey?: string): Promise<{ status: string }> {
   if (USE_MOCK) return mockPause()
-  return request<{ status: string }>('/kafka/pause', idempotentPost())
+  return request<{ status: string }>('/kafka/pause', idempotentPost(idempotencyKey))
 }
 
-export function resumeConsumers(): Promise<{ status: string }> {
+export function resumeConsumers(idempotencyKey?: string): Promise<{ status: string }> {
   if (USE_MOCK) return mockResume()
-  return request<{ status: string }>('/kafka/resume', idempotentPost())
+  return request<{ status: string }>('/kafka/resume', idempotentPost(idempotencyKey))
 }
 
 export function getOverview(): Promise<OverviewView> {
@@ -185,22 +185,23 @@ export function getDltMessages(limit = 20): Promise<DltMessageView[]> {
   return request<DltMessageView[]>(`/dlt/messages?limit=${encodeURIComponent(String(limit))}`)
 }
 
-export function replayDlt(maxRecords = 100): Promise<DltReplayStats> {
+export function replayDlt(maxRecords = 100, idempotencyKey?: string): Promise<DltReplayStats> {
   if (USE_MOCK) return mockReplayDlt(maxRecords)
   return request<DltReplayStats>(
     `/dlt/replay?maxRecords=${encodeURIComponent(String(maxRecords))}`,
-    idempotentPost(),
+    idempotentPost(idempotencyKey),
   )
 }
 
 export function replayDltOne(
   partition: number,
   offset: number,
+  idempotencyKey?: string,
 ): Promise<{ partition: number; offset: number; outcome: string }> {
   if (USE_MOCK) return mockReplayDltOne(partition, offset)
   return request<{ partition: number; offset: number; outcome: string }>(
     `/dlt/replay-one?partition=${partition}&offset=${offset}`,
-    idempotentPost(),
+    idempotentPost(idempotencyKey),
   )
 }
 
@@ -209,9 +210,9 @@ export function getReconReport(): Promise<ReconReport | null> {
   return request<ReconReport | null>('/recon')
 }
 
-export function runRecon(): Promise<ReconReport> {
+export function runRecon(idempotencyKey?: string): Promise<ReconReport> {
   if (USE_MOCK) return mockRunRecon()
-  return request<ReconReport>('/recon/run', idempotentPost())
+  return request<ReconReport>('/recon/run', idempotentPost(idempotencyKey))
 }
 
 export function getData(table: string, params: DataQueryParams): Promise<DataView> {

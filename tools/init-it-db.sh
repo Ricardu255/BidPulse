@@ -5,7 +5,11 @@
 # 只允许 *_it 库名，避免误连 demo / 生产库。
 #
 # 用法（项目根目录）：
-#   tools/init-it-db.sh
+#   tools/init-it-db.sh            # 目标库必须为空，否则拒绝
+#   tools/init-it-db.sh --force    # 允许清空已有的 _it 库后重建
+#
+# 为什么要 --force：sql/all-schema.sql 是「全新建库」基线，开头有一串
+# DROP TABLE IF EXISTS；对着已有数据的库跑一遍会静默清空业务表。
 #
 # 可覆盖的环境变量：
 #   BIDPULSE_MYSQL_HOST      默认 127.0.0.1
@@ -43,6 +47,22 @@ MYSQL=(mysql -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" --default-charac
 
 echo "==> 创建数据库 $DB_NAME"
 "${MYSQL[@]}" -e "CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` DEFAULT CHARACTER SET utf8mb4"
+
+# 非空库需要显式 --force：baseline 里的 DROP TABLE 会清空已有数据
+FORCE=0
+for arg in "$@"; do
+  case "$arg" in
+    --force) FORCE=1 ;;
+  esac
+done
+existing_tables="$("${MYSQL[@]}" -N -B -e \
+  "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = '$DB_NAME'" 2>/dev/null || echo 0)"
+existing_tables="${existing_tables:-0}"
+if [ "$existing_tables" -gt 0 ] && [ "$FORCE" -ne 1 ]; then
+  echo "拒绝初始化：$DB_NAME 已有 $existing_tables 张表，all-schema.sql 会 DROP 后重建。" >&2
+  echo "  确认要清空请加 --force，或改用另一个 BIDPULSE_IT_DB。" >&2
+  exit 1
+fi
 
 echo "==> 应用 baseline：sql/all-schema.sql"
 "${MYSQL[@]}" "$DB_NAME" < "$ROOT/sql/all-schema.sql"

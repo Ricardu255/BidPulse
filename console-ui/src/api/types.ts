@@ -24,12 +24,22 @@ export interface AdInfo {
   bid: number
 }
 
+/**
+ * 候选在一次竞价里的终局，取值范围由后端 `BidTraceBuilder` 固定写入。
+ * 用字面量联合而不是 string：mock 和 UI 分支里的拼写错误才能在编译期暴露。
+ */
+export type TraceCandidateResult =
+  | 'SUCCESS'
+  | 'INSUFFICIENT'
+  | 'FREQ_CAPPED'
+  | 'NEEDS_SEED'
+  | 'REDIS_ERROR'
+
 export interface TraceCandidate {
   adId: number
   bid: number | null
   price: number | null
-  /** SUCCESS / INSUFFICIENT / FREQ_CAPPED / NEEDS_SEED / REDIS_ERROR */
-  result: string
+  result: TraceCandidateResult
 }
 
 export interface TraceStep {
@@ -44,11 +54,14 @@ export interface TraceTimings {
   totalMs: number
 }
 
+/** 一次竞价的终局：有广告成交 / 兜底广告 / 不兜底的空广告。 */
+export type TraceOutcome = 'WIN' | 'FALLBACK' | 'EMPTY'
+
 export interface BidTrace {
   requestId: string
   ts: number
-  /** WIN / FALLBACK / EMPTY */
-  outcome: string
+  /** 后端只会写这三种；写成 string 时大小写拼错会静默落进「空广告」分支。 */
+  outcome: TraceOutcome
   fallbackReason: string | null
   candidateCnt: number
   matchCnt: number

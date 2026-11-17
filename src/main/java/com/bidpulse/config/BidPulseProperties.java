@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -38,6 +39,9 @@ import java.util.Map;
 public class BidPulseProperties {
 
     /** 二价最小加价（元） */
+    // @DecimalMin 不拦 null：YAML 留空/环境变量占位为空时会留下 null，
+    // 直到热路径 PricingPolicy.secondPrice 里 requireNonNull 才炸，报价全退兜底。
+    @NotNull(message = "bidpulse.min-increment 不能为空")
     @DecimalMin(value = "0.0001", message = "bidpulse.min-increment 必须大于 0")
     private BigDecimal minIncrement = new BigDecimal("0.01");
 
@@ -101,7 +105,9 @@ public class BidPulseProperties {
     @Data
     public static class CircuitBreakerSettings {
         /** sentinel = 慢调用比例熔断；local = 自写连续失败计数（对照基线） */
-        @Pattern(regexp = "sentinel|local", message = "bidpulse.circuit-breaker.impl 只能是 sentinel 或 local")
+        // 大小写不敏感：CircuitBreakerConfig 用 equalsIgnoreCase 取实现，
+        // 校验若只认小写，sentinel/LOCAL 这类能跑的配置会在启动期直接失败。
+        @Pattern(regexp = "(?i)(sentinel|local)", message = "bidpulse.circuit-breaker.impl 只能是 sentinel 或 local")
         private String impl = "sentinel";
         /** 熔断持续时长（ms）；Sentinel 只接受秒，装载时换算 */
         @Min(value = 1, message = "bidpulse.circuit-breaker.cooldown-ms 必须大于 0")
@@ -393,7 +399,10 @@ public class BidPulseProperties {
         /** 明文密码只从环境变量/测试配置注入，启动后立即编码，不持久化 */
         private String password = "";
         /** VIEWER / OPERATOR / ADMIN */
-        @Pattern(regexp = "VIEWER|OPERATOR|ADMIN", message = "bidpulse.auth.users.*.role 只能是 VIEWER/OPERATOR/ADMIN")
+        // Role.from 内部是 valueOf(trim().toUpperCase())，大小写不敏感；
+        // 校验必须与之对齐，否则 admin / Admin 这类能跑的写法会在启动期失败。
+        @Pattern(regexp = "(?i)(VIEWER|OPERATOR|ADMIN)",
+                message = "bidpulse.auth.users.*.role 只能是 VIEWER/OPERATOR/ADMIN")
         private String role = "VIEWER";
     }
 }

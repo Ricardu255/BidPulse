@@ -10,6 +10,10 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+
 /**
  * 消费组：billing-recon（计费对账）。
  *
@@ -56,20 +60,58 @@ public class BillingReconConsumer extends AbstractBidEventConsumer {
                 e.getTs(),
                 payloadHash);
 
-        String storedHash = jdbc.queryForObject(
+        List<String> stored = jdbc.query(
                 "SELECT payload_hash FROM billing_event WHERE event_id = ?",
-                String.class, e.getEventId());
+                (rs, i) -> rs.getString(1), e.getEventId());
+        String storedHash = stored.isEmpty() ? null : stored.get(0);
         if (storedHash == null) {
-            // 上线前的旧账单没有指纹：回填本次载荷，后续重放即可被识别。
-            jdbc.update(
-                    "UPDATE billing_event SET payload_hash = ? "
-                            + "WHERE event_id = ? AND payload_hash IS NULL",
-                    payloadHash, e.getEventId());
-            log.warn("billing_event 旧记录已回填 payload_hash: eventId={}", e.getEventId());
+            // 上线前的旧账单没有指纹。这里不能拿「先到者」的载荷去盖章：
+            // 上面的 INSERT 在重复时是 no-op，行里的金额是**另一次**载荷写下的，
+            // 盖上去会让指纹与内容永久不符，未来重放原始载荷还会被误判成冲突进 DLT。
+            // 正确做法是拿存量业务列与本次载荷比对：一致才回填，不一致按冲突转人工。
+            Map<String, Object> row = jdbc.queryForMap(
+                    "SELECT ad_id, pay_price, ts FROM billing_event WHERE event_id = ?", e.getEventId());
+            if (matchesStored(row, e)) {
+                int backfilled = jdbc.update(
+                        "UPDATE billing_event SET payload_hash = ? "
+                                + "WHERE event_id = ? AND payload_hash IS NULL",
+                        payloadHash, e.getEventId());
+                if (backfilled > 0) {
+                    log.warn("billing_event 旧记录已回填 payload_hash: eventId={}", e.getEventId());
+                }
+            } else {
+                throw new BidEventPayloadConflictException(
+                        "计费载荷冲突：eventId=" + e.getEventId()
+                                + "。旧账单无指纹且业务字段与本次载荷不一致，需人工核对后处理。");
+            }
         } else if (!storedHash.equals(payloadHash)) {
             throw new BidEventPayloadConflictException(
                     "计费载荷冲突：eventId=" + e.getEventId()
                             + "。billing_event 已存在不同载荷，拒绝改写金额并转入 DLT。");
         }
+    }
+
+    /**
+     * 存量账单（无指纹）与本次载荷的业务字段是否一致。
+     *
+     * <p>比较 {@code ad_id / pay_price / ts} 三列即可：它们由载荷直接映射，且重复投递时
+     * INSERT 是 no-op，所以这三列就是「当初写下这行的那份载荷」的等价物。
+     */
+    private static boolean matchesStored(Map<String, Object> row, BidEvent e) {
+        Object adId = row.get("ad_id");
+        Object payPrice = row.get("pay_price");
+        Object ts = row.get("ts");
+        if (!(adId instanceof Number) || !(ts instanceof Number)) {
+            return false;
+        }
+        if (((Number) adId).longValue() != e.getAdId().longValue()
+                || ((Number) ts).longValue() != e.getTs()) {
+            return false;
+        }
+        if (!(payPrice instanceof BigDecimal)) {
+            return false;
+        }
+        return e.getPayPrice() != null
+                && ((BigDecimal) payPrice).compareTo(e.getPayPrice()) == 0;
     }
 }

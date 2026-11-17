@@ -232,8 +232,13 @@
   border-radius: 4px;
 }
 
-.el-button {
+/* 只约束默认尺寸：`size="small"` 的按钮要能保持 24px 高，
+   否则全局 32px 会把 Element Plus 的 size 语义整体抹平。 */
+.el-button:not(.el-button--small):not(.el-button--large) {
   height: 32px;
+}
+
+.el-button {
   padding: 0 12px;
   border-radius: 6px;
   font-size: 13px;
@@ -292,14 +297,17 @@
   padding: 11px 0;
 }
 
-.el-table .cell {
+/* 只有显式加了 show-overflow-tooltip 的列才禁止换行（Element Plus 会给它的 cell 加
+   .el-tooltip）。以前的全局 nowrap 会让需要换行的长文本被裁掉，且没有任何提示。 */
+.el-table .cell.el-tooltip {
   white-space: nowrap;
 }
 
-.el-table tr,
+/* 行背景交给 Element Plus：`--el-table-row-hover-bg-color` 已在 .el-table 上设好，
+   之前用 !important 把透明背景钉死，等于把 hover 反馈整个抹掉。 */
 .el-table__row--striped .el-table__cell,
 .el-table__row--striped td.el-table__cell {
-  background: transparent !important;
+  background: transparent;
 }
 
 .el-table::before,
@@ -307,12 +315,15 @@
   display: none;
 }
 
-.el-progress-bar__outer {
-  background-color: #e9edef !important;
+/* 状态色优先：success / exception / warning 的进度条由 Element Plus 按状态上色，
+   只有「无状态」的进度条才统一用强调色。之前无条件的 !important 让
+   BudgetView 的预算告急红色彻底失效——那正是用户最该看见的信号。 */
+.el-progress:not(.is-success):not(.is-warning):not(.is-exception) .el-progress-bar__outer {
+  background-color: #e9edef;
 }
 
-.el-progress-bar__inner {
-  background-color: var(--bp-accent) !important;
+.el-progress:not(.is-success):not(.is-warning):not(.is-exception) .el-progress-bar__inner {
+  background-color: var(--bp-accent);
 }
 
 .el-tag--success {
@@ -412,7 +423,7 @@
   font-size: 12px;
 }
 
-@media (max-width: 1100px) {
+@media (min-width: 721px) and (max-width: 1100px) {
   .form-grid,
   .group-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -424,6 +435,8 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  /* 只在 3 列布局里去掉每行最后一格的右边框；≤720px 会切成 2 列，
+     这条规则若继续生效，会让第 3、6… 格莫名少一条分隔线。 */
   .metric:nth-child(3n) {
     border-right: 0;
   }

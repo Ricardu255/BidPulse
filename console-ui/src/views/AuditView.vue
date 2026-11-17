@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { getAuditLogs } from '@/api/console'
 import type { AuditLogView } from '@/api/types'
-import { errorText } from '@/format'
+import { errorText, timeText } from '@/format'
 
 const logs = ref<AuditLogView[]>([])
 const loading = ref(false)
@@ -19,10 +19,6 @@ async function load(): Promise<void> {
   } finally {
     loading.value = false
   }
-}
-
-function formatTime(value: string): string {
-  return value.replace('T', ' ').slice(0, 19)
 }
 
 function statusType(status: number): 'success' | 'danger' | 'warning' | 'info' {
@@ -63,7 +59,7 @@ onMounted(load)
 
       <el-table v-loading="loading" :data="logs" row-key="id" empty-text="暂无审计记录">
         <el-table-column prop="createdAt" label="时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+          <template #default="{ row }">{{ timeText(row.createdAt) }}</template>
         </el-table-column>
         <el-table-column prop="actor" label="操作人" width="120" />
         <el-table-column prop="role" label="角色" width="110">

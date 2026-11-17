@@ -67,7 +67,9 @@ body {
   color: #fff;
 }
 
-:focus-visible {
+/* Element Plus 会在 .el-input__wrapper 上画自己的圆角 focus ring，
+   这里若再给内部 <input> 画一圈方形 outline，输入框里会出现两个错位的焦点框。 */
+:focus-visible:not(.el-input__inner):not(.el-textarea__inner):not(.el-select__input) {
   outline: 2px solid var(--bp-accent);
   outline-offset: 2px;
 }
@@ -242,15 +244,7 @@ body {
   color: var(--bp-muted);
 }
 
-.user-chip {
-  padding: 3px 8px;
-  border: 1px solid var(--bp-line);
-  border-radius: 5px;
-  background: #fff;
-  color: var(--bp-ink-soft);
-  font-size: 12px;
-  white-space: nowrap;
-}
+/* .user-chip 的样式统一在 pages.css 里定义（本文件先加载，重复定义只会让人改错地方）。 */
 
 /* ---------- Work surface: white sheet inset 8px right/bottom ---------- */
 .main {

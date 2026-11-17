@@ -64,7 +64,9 @@ class DataSourceConfigTest {
 
         assertTrue(template.isReadOnly());
         assertEquals(TransactionDefinition.ISOLATION_REPEATABLE_READ, template.getIsolationLevel());
-        assertEquals(2, template.getTimeout());
+        // 一个概览快照里连跑 5 条聚合查询：超时按「单语句预算 × 5」放宽，
+        // 否则单条慢查询就会让整页数据整体失败（单语句预算本身另有 2s 兜底）。
+        assertEquals(2 * 5, template.getTimeout());
 
         template.executeWithoutResult(status -> {
         });

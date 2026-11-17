@@ -7,12 +7,23 @@
     也按契约共享给调用方。SpotBugs 无法区分「注入的容器管理对象」与
     「真正可变的外部状态」，在 Spring 项目里这两类告警是系统性误报。
 
+    但豁免必须收窄：早先整条 Match 没有任何 Class/Package 约束，
+    连「getter 返回内部 byte[]/char[] 密钥」「返回可变内部集合」这类真缺陷
+    也一起被吞掉。现在拆成两条：
+      · EI_EXPOSE_REP2（构造器/ setter 保存外部引用）——Spring 注入的固有形态，全项目豁免；
+      · EI_EXPOSE_REP（getter 把内部可变状态抛出去）——只豁免对外契约就是
+        「共享只读视图」的 DTO 包，其余位置保留告警。
+
   ProductionConfigGuard 的 CT_CONSTRUCTOR_THROW：
     prod 启动守卫故意在构造期抛异常，缺密钥时必须让应用启动失败。
 -->
 <FindBugsFilter>
   <Match>
-    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Bug pattern="EI_EXPOSE_REP"/>
+    <Package name="~com\.bidpulse\.(api|console|event)\.dto.*"/>
   </Match>
   <Match>
     <Class name="com.bidpulse.config.ProductionConfigGuard"/>

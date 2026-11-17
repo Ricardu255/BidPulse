@@ -6,6 +6,7 @@ import BidTraceTimeline from '@/components/BidTraceTimeline.vue'
 import OverviewHealthCard from '@/components/overview/OverviewHealthCard.vue'
 import OverviewDistributionCard from '@/components/overview/OverviewDistributionCard.vue'
 import OverviewTrendChart from '@/components/overview/OverviewTrendChart.vue'
+import TraceCell from '@/components/overview/TraceCell.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -57,16 +58,29 @@ async function openRecent(): Promise<void> {
   }
 }
 
-/** 明细异步刷盘（≤200ms），刚发起的竞价可能短暂 404；重试 3 次再放弃 */
-async function loadTraceWithRetry(requestId: string): Promise<BidTrace> {
-  for (let attempt = 0; ; attempt += 1) {
+/**
+ * 明细异步刷盘（≤200ms），刚发起的竞价可能短暂 404；最多试 3 次再放弃。
+ *
+ * <p>既有上限也能被中途取消：弹窗关掉或切到别的行时，不再为旧的一行空转 500ms 定时器。
+ * 没有轨迹的行（外部 /bid 写入、has_trace = 0）本来就不会有明细，两次等待纯属浪费。
+ */
+const TRACE_MAX_ATTEMPTS = 3
+const TRACE_RETRY_DELAY_MS = 500
+
+async function loadTraceWithRetry(requestId: string, isCancelled: () => boolean): Promise<BidTrace> {
+  for (let attempt = 0; attempt < TRACE_MAX_ATTEMPTS; attempt += 1) {
     try {
       return await getBidTrace(requestId)
     } catch (e) {
-      if (!(e instanceof ApiError) || e.status !== 404 || attempt >= 2) throw e
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      const isNotFound = e instanceof ApiError && e.status === 404
+      const isLastAttempt = attempt === TRACE_MAX_ATTEMPTS - 1
+      if (!isNotFound || isLastAttempt) throw e
+      await new Promise((resolve) => setTimeout(resolve, TRACE_RETRY_DELAY_MS))
+      if (isCancelled()) throw e
     }
   }
+  // 循环体内要么 return 要么 throw，这里只是让返回类型收窄
+  throw new Error('unreachable: trace retry loop exited')
 }
 
 let traceSeq = 0
@@ -77,7 +91,7 @@ async function openTrace(row: RecentBidView): Promise<void> {
   trace.value = null
   traceRequestId.value = row.requestId
   try {
-    const result = await loadTraceWithRetry(row.requestId)
+    const result = await loadTraceWithRetry(row.requestId, () => mySeq !== traceSeq)
     if (mySeq === traceSeq) trace.value = result
   } catch (e) {
     // 404 表示明细还没刷出来或该条没有轨迹，交给弹窗空状态说明，不弹错误 toast
@@ -217,10 +231,7 @@ onMounted(refresh)
         </el-table-column>
         <el-table-column label="轨迹" width="80">
           <template #default="{ row }">
-            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
-              查看
-            </el-button>
-            <span v-else class="hint">—</span>
+            <TraceCell :row="row" @open="openTrace" />
           </template>
         </el-table-column>
       </el-table>
@@ -234,9 +245,7 @@ onMounted(refresh)
             <span>{{ row.bidAt }}</span>
             <strong>{{ money(row.payPrice) }}</strong>
             <span>广告 {{ row.adId }}</span>
-            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
-              轨迹
-            </el-button>
+            <TraceCell :row="row" label="轨迹" @open="openTrace" />
           </div>
         </div>
       </div>
@@ -247,7 +256,7 @@ onMounted(refresh)
       </p>
     </el-card>
 
-    <el-drawer v-model="recentDrawer" title="最近竞价" size="760px">
+    <el-drawer v-model="recentDrawer" title="最近竞价" size="min(760px, 92vw)">
       <el-table :data="recentAll" stripe size="small">
         <el-table-column prop="bidAt" label="时间" width="170" />
         <el-table-column prop="requestId" label="请求 ID" min-width="160">
@@ -272,16 +281,13 @@ onMounted(refresh)
         </el-table-column>
         <el-table-column label="轨迹" width="80">
           <template #default="{ row }">
-            <el-button v-if="row.hasTrace" link type="primary" size="small" @click="openTrace(row)">
-              查看
-            </el-button>
-            <span v-else class="hint">—</span>
+            <TraceCell :row="row" @open="openTrace" />
           </template>
         </el-table-column>
       </el-table>
     </el-drawer>
 
-    <el-dialog v-model="traceVisible" title="决策轨迹" width="760px" destroy-on-close>
+    <el-dialog v-model="traceVisible" title="决策轨迹" width="min(760px, 92vw)" destroy-on-close>
       <div v-loading="traceLoading" class="trace-dialog-body">
         <BidTraceTimeline v-if="trace" :trace="trace" />
         <el-empty

@@ -7,6 +7,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.support.Acknowledgment;
 
+import java.util.List;
+
 /**
  * 竞价事件消费模板：<b>解析 → 幂等去重 → 业务写 → 提交后 ack</b>。
  *
@@ -56,18 +58,31 @@ public abstract class AbstractBidEventConsumer {
                     "INSERT IGNORE INTO processed_event(event_id, grp, payload_hash) VALUES(?, ?, ?)",
                     event.getEventId(), group, payloadHash);
             if (inserted == 0) {
-                String existingHash = jdbc.queryForObject(
+                // 用列表查询而不是 queryForObject：唯一键虽然保证行存在过，但
+                // ProcessedEventCleaner 可能刚把它清掉，queryForObject 会抛
+                // EmptyResultDataAccessException，被外层当成「处理失败」反复重投。
+                // 查不到就按「已处理」放行——这是去重与清理的竞态，重放没有意义。
+                List<String> hashes = jdbc.query(
                         "SELECT payload_hash FROM processed_event WHERE event_id = ? AND grp = ?",
-                        String.class, event.getEventId(), group);
+                        (rs, i) -> rs.getString(1), event.getEventId(), group);
+                if (hashes.isEmpty()) {
+                    log.debug("{} 去重记录已被清理，跳过重复投递 eventId={}", group, event.getEventId());
+                    AckAfterCommit.ack(ack);
+                    return;
+                }
+                String existingHash = hashes.get(0);
                 if (existingHash == null) {
                     // 上线前写入的旧记录：没有原始指纹可比对。回填本次指纹，
                     // 让后续重复投递至少能被识别；不把升级窗口内的正常重投误报成冲突。
-                    jdbc.update(
+                    int backfilled = jdbc.update(
                             "UPDATE processed_event SET payload_hash = ? "
                                     + "WHERE event_id = ? AND grp = ? AND payload_hash IS NULL",
                             payloadHash, event.getEventId(), group);
-                    log.warn("{} 命中旧版去重记录，已回填 payload_hash: eventId={}",
-                            group, event.getEventId());
+                    // 并发消费者可能已经先回填过：只有真的改到行才值得打日志
+                    if (backfilled > 0) {
+                        log.warn("{} 命中旧版去重记录，已回填 payload_hash: eventId={}",
+                                group, event.getEventId());
+                    }
                 } else if (!existingHash.equals(payloadHash)) {
                     throw new BidEventPayloadConflictException(
                             "事件载荷冲突：eventId=" + event.getEventId() + ", grp=" + group

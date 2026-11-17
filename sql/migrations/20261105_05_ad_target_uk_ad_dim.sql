@@ -8,6 +8,8 @@
 --   SELECT ad_id, dim_type, dim_value, COUNT(*) FROM ad_target
 --   GROUP BY ad_id, dim_type, dim_value HAVING COUNT(*) > 1;
 -- 幂等：唯一键已存在时跳过。
+-- 注意必须同时判 NON_UNIQUE = 0：同名普通索引（NON_UNIQUE=1）不算唯一约束，
+-- 只看 INDEX_NAME 会跳过 ALTER 却照样写入迁移记录，唯一性实际没生效。
 -- =====================================================================
 
 SET @ddl = (
@@ -17,6 +19,7 @@ SET @ddl = (
       WHERE TABLE_SCHEMA = DATABASE()
         AND TABLE_NAME = 'ad_target'
         AND INDEX_NAME = 'uk_ad_dim'
+        AND NON_UNIQUE = 0
     ),
     'SELECT 1',
     'ALTER TABLE ad_target ADD UNIQUE KEY uk_ad_dim (ad_id, dim_type, dim_value), ALGORITHM=INPLACE, LOCK=NONE'

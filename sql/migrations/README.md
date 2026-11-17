@@ -52,6 +52,22 @@ tools/init-it-db.sh
 CI 在每次构建都会对 `bidpulse_it` 重跑一遍 baseline 与全部迁移，
 因此**任何不幂等的迁移都会在 CI 直接失败**。
 
+但「先建新版 baseline、再跑迁移」并不能验证升级路径：所有 `information_schema`
+守卫都会命中，`ALTER` 分支一次都不会执行。真正只在对存量库升级时才跑的 SQL
+（字符串里的双重引号转义、`ALGORITHM=INPLACE` 兼容性、唯一键撞上重复行）
+因此进不了 CI。迁移升级演练脚本补的正是这一段：
+
+```bash
+tools/verify-migrations.sh          # 演练完自动删库
+tools/verify-migrations.sh --keep   # 保留演练库 bidpulse_migration 便于排查
+```
+
+它先用 `sql/all-schema.sql` 建库，再用 `tools/legacy-downgrade.sql` 把结构退回
+「迁移 01–08 之前」的老库，然后按文件名顺序真正执行一遍全部迁移，断言
+列/索引/唯一键/迁移记录都恢复到位，最后再执行第二遍确认幂等。
+新增迁移时如果加了新的列或索引，记得同步更新 `tools/legacy-downgrade.sql`
+与脚本里的断言，否则演练出来的「老库」就不老了。
+
 ## 新迁移模板
 
 ```sql

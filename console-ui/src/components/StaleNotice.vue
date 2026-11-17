@@ -10,12 +10,16 @@ const updatedText = computed(() => {
   if (!props.lastUpdatedAt) return '—'
   return new Date(props.lastUpdatedAt).toLocaleTimeString('zh-CN', { hour12: false })
 })
+
+/** 首次加载就失败：还没有任何数据可「保留」，文案不能说“保留上次数据”。 */
+const hasData = computed(() => props.lastUpdatedAt !== null)
 </script>
 
 <template>
   <div v-if="stale" class="stale-notice">
     <el-tag type="warning" size="small">数据可能已过期</el-tag>
-    <span>最近一次成功刷新 {{ updatedText }}；后台刷新失败，页面保留上次数据。</span>
+    <span v-if="hasData">最近一次成功刷新 {{ updatedText }}；后台刷新失败，页面保留上次数据。</span>
+    <span v-else>首次加载失败，页面暂无数据；请检查后端与网络后重试。</span>
   </div>
   <div v-else-if="lastUpdatedAt" class="fresh-notice">更新于 {{ updatedText }}</div>
 </template>

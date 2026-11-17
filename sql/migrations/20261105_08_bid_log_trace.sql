@@ -10,6 +10,11 @@
 --   - 轨迹是「可采样」数据，丢一条不影响计费与对账；
 --   - JSON 列不建索引，避免给写入热路径增加维护成本；
 --   - 候选封顶 10 条且不含用户标识，控制体积与隐私。
+--
+-- 不加 AFTER bid_at：只有 MySQL ≥ 8.0.29 支持任意位置的 INSTANT ADD COLUMN，
+-- 更早的 8.0.x 会退化成 INPLACE 整表 rebuild。bid_log 是竞价写入热表（千万级），
+-- 存量库升级时的重建 IO 会直接拖慢线上写入；列顺序不被任何查询依赖
+-- （BidDetailBuffer / ConsoleBidTraceService / 概览查询全部使用显式列名）。
 -- =====================================================================
 
 SET @ddl = (
@@ -18,7 +23,7 @@ SET @ddl = (
            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'bid_log'
              AND COLUMN_NAME = 'trace_json'),
     'SELECT 1',
-    'ALTER TABLE bid_log ADD COLUMN trace_json JSON NULL COMMENT ''决策轨迹 JSON，仅控制台竞价写入；可采样、不参与对账'' AFTER bid_at'
+    'ALTER TABLE bid_log ADD COLUMN trace_json JSON NULL COMMENT ''决策轨迹 JSON，仅控制台竞价写入；可采样、不参与对账'''
   )
 );
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;

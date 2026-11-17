@@ -6,6 +6,7 @@ import org.springframework.core.env.Environment;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -52,7 +53,9 @@ public class ProductionConfigGuard {
         }
         users.forEach((name, user) -> {
             if (user == null || isBlank(user.getPassword())) {
-                missing.add("BIDPULSE_" + name.toUpperCase().replace('-', '_') + "_PASSWORD");
+                // Locale.ROOT：土耳其语等区域的默认 locale 会把 i 变成 İ，
+                // 报错信息里的环境变量名就对不上了。
+                missing.add("BIDPULSE_" + name.toUpperCase(Locale.ROOT).replace('-', '_') + "_PASSWORD");
             }
         });
         return missing;

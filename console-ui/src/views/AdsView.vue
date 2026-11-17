@@ -8,7 +8,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { changeAdStatus, getAdDetail, getAds, updateAdBudget } from '@/api/console'
 import type { AdDetail, AdView } from '@/api/types'
-import { errorText, money } from '@/format'
+import { errorText, money, timeText } from '@/format'
 import { useAsyncAction } from '@/composables/useAsyncAction'
 import { hasRole } from '@/auth'
 
@@ -74,18 +74,12 @@ function reset(): void {
   search()
 }
 
-function formatTime(value: string | null | undefined): string {
-  if (!value) return '—'
-  return value.replace('T', ' ').slice(0, 19)
-}
-
 function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
 }
 
-const { loading: detailLoading, run: fetchDetail } = useAsyncAction(
+const { loading: detailLoading, error: detailError, run: fetchDetail } = useAsyncAction(
   (row: AdView) => getAdDetail(row.id),
-  notifyError,
 )
 
 let detailSeq = 0
@@ -95,12 +89,20 @@ async function openDetail(row: AdView): Promise<void> {
   drawer.value = true
   detail.value = null
   const result = await fetchDetail(row)
-  // 连续点不同行时，只接受最后一次点击的响应
+  // 连续点不同行时，只接受最后一次点击的响应：
+  // 旧请求的失败也不能弹 toast，否则用户会看到一条与当前抽屉无关的错误。
   if (seq !== detailSeq) return
-  detail.value = result ?? null
+  if (result === undefined) {
+    if (detailError.value) notifyError(detailError.value)
+    return
+  }
+  detail.value = result
 }
 
 function openCreate(): void {
+  // 让在途的 openEdit 响应作废：它回来时 formVisible 已被这次新建打开，
+  // 若不失效，会在新建表单里填进上一行的广告详情。
+  editSeq += 1
   editingId.value = null
   editingStatus.value = null
   editingDetail.value = null
@@ -231,7 +233,7 @@ onMounted(() => load(1))
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="160">
-          <template #default="{ row }">{{ formatTime(row.updatedAt) }}</template>
+          <template #default="{ row }">{{ timeText(row.updatedAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">

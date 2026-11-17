@@ -5,7 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getData } from '@/api/console'
 import type { DataView } from '@/api/types'
-import { errorText, money } from '@/format'
+import { errorText, money4, timeText } from '@/format'
 import { toCsv } from '@/csv'
 import { FALLBACK_AD_ID } from '@/constants'
 
@@ -35,7 +35,8 @@ const tableMeta: Record<string, {
       ad_id: '广告 ID',
       advertiser_id: '广告主 ID',
       pay_price: '扣费金额（元）',
-      ts: '事件时间戳（毫秒）',
+      // ts（毫秒时间戳）对运营没有可读性，展示时被 displayColumns 过滤掉；
+      // 这里不再保留它的中文标签，避免让人以为表格里真有这一列。
       event_time: '事件时间',
     },
   },
@@ -71,6 +72,13 @@ const displayColumns = computed(() =>
   (data.value?.columns ?? []).filter((column) => !(data.value?.table === 'billing_event' && column === 'ts')),
 )
 const MONETARY_COLUMNS = new Set(['win_bid', 'pay_price', 'spend'])
+/**
+ * 消费组展示名。
+ *
+ * <p>键必须与后端 `AbstractBidEventConsumer` 各子类的消费组名、
+ * 以及 `sql/all-schema.sql` 里的 group 值保持一致；对不上的会退回原始 id，
+ * 页面不会报错但会把 `billing-recon` 直接展示给用户。
+ */
 const GROUP_LABELS: Record<string, string> = {
   'billing-recon': '计费账单',
   'hourly-preagg': '小时聚合',
@@ -91,8 +99,10 @@ function formatValue(column: string, value: unknown): string {
   if (column === 'has_ad') return Number(value) === 1 ? '有广告' : '空广告'
   if (column === 'ad_id' && Number(value) === FALLBACK_AD_ID) return `兜底广告（${FALLBACK_AD_ID}）`
   if (column === 'grp') return GROUP_LABELS[String(value)] ?? String(value)
-  if (MONETARY_COLUMNS.has(column)) return money(Number(value))
-  if (column === 'created_at' || column === 'event_time') return String(value).replace('T', ' ').slice(0, 19)
+  // 金额列在诊断页保留 4 位小数：DECIMAL(10,4) 的亚分差异（如 0.0049）
+  // 用 2 位小数会显示成 ¥0.00，正好抹掉运营来这页要找的对账差额。
+  if (MONETARY_COLUMNS.has(column)) return money4(Number(value))
+  if (column === 'created_at' || column === 'event_time') return timeText(String(value))
   return String(value)
 }
 
@@ -122,8 +132,9 @@ function isNumericColumn(column: string): boolean {
 
 function exportCsv(): void {
   if (!data.value) return
-  // BOM 让 Excel 正确识别 UTF-8 中文
-  const blob = new Blob([toCsv(data.value.columns, data.value.rows)], { type: 'text/csv;charset=utf-8' })
+  // 导出「屏幕上看到的列」，而不是后端返回的原始列：
+  // 否则 billing_event 会多导出一个界面上被隐藏的 ts，用户对不上自己对过的表。
+  const blob = new Blob([toCsv(displayColumns.value, data.value.rows)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url

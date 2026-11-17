@@ -596,9 +596,15 @@ public class BidService {
             detail.setSortCost(0);
             detail.setBillCost(billCostMs);
             detail.setBidAt(LocalDateTime.now());
-            // 轨迹只随明细异步落库：序列化失败只会丢 trace，不影响竞价结果本身
+            // 轨迹可丢、明细不可丢：序列化单独 try，Jackson 抛异常也不能拖累 bid_log 入队
+            // （概览的竞价量 / P95 / 兜底率全靠这张表）。
             if (r.getTrace() != null) {
-                detail.setTraceJson(objectMapper.writeValueAsString(r.getTrace()));
+                try {
+                    detail.setTraceJson(objectMapper.writeValueAsString(r.getTrace()));
+                } catch (Exception ex) {
+                    log.warn("轨迹序列化失败（丢弃 trace，明细照常入库）requestId={}: {}",
+                            requestId, ex.getMessage());
+                }
             }
             bidDetailBuffer.enqueue(detail);
         } catch (Exception ex) {

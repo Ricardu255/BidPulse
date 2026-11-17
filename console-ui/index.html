@@ -6,10 +6,24 @@
     <link rel="icon" href="data:," />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      字体用 preload + onload 换成 stylesheet，而不是同步 <link rel="stylesheet">：
+      同步加载会在内网/离线环境里卡住首屏渲染，直到字体请求超时。
+      var(--font-sans) 已有 PingFang SC / 微软雅黑 / system-ui 兜底，
+      字体晚到只是字形变化，不影响可读性。
+    -->
     <link
+      rel="preload"
+      as="style"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
+      onload="this.rel='stylesheet'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      />
+    </noscript>
     <title>BidPulse Console</title>
   </head>
   <body>

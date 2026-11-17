@@ -55,10 +55,12 @@ const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
       budget.value = null
       frequency.value = null
       notFound.value = false
-      return
+      // 没选中广告 = 这一轮什么都没查，不能算「刷新成功」，
+      // 否则「更新于」会一直往前跳，看着像数据在实时刷新。
+      return 'skipped'
     }
     // 广告已确认不存在时，后台轮询不再反复打接口；用户改筛选或手动刷新会重新查询
-    if (scheduled && notFound.value) return
+    if (scheduled && notFound.value) return 'skipped'
 
     const adId = session.adId
     const [budgetResult, frequencyResult] = await Promise.allSettled([
@@ -66,7 +68,7 @@ const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
       getFrequency(adId, session.userId),
     ])
     // 请求期间用户改了 adId：丢弃旧响应，避免旧广告数据覆盖新广告
-    if (!isCurrent() || adId !== session.adId) return
+    if (!isCurrent() || adId !== session.adId) return 'skipped'
 
     if (budgetResult.status === 'rejected') {
       const e = budgetResult.reason
@@ -74,7 +76,7 @@ const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
         notFound.value = true
         budget.value = null
         frequency.value = null
-        return
+        return 'skipped'
       }
       if (!scheduled) notifyError(e)
       throw e
@@ -87,7 +89,11 @@ const { stale, lastUpdatedAt, refresh: refreshData } = usePolling(
     } else {
       // 频次接口不可用（例如旧后端缺少 /frequency）时，仍保留预算展示。
       frequency.value = null
-      if (!isAdMissing(frequencyResult.reason)) notifyError(frequencyResult.reason)
+      // 与预算分支保持一致：定时轮询失败只标记陈旧，手动刷新才弹 toast，
+      // 否则接口持续失败时每 2 秒弹一次（分组只能合并成一条，但仍是噪音）。
+      if (!isAdMissing(frequencyResult.reason) && !scheduled) {
+        notifyError(frequencyResult.reason)
+      }
     }
   },
   2000,

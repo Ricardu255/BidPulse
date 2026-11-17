@@ -13,6 +13,10 @@
 --
 -- 老数据保持 NULL：消费端遇到 NULL 按「旧版记录」处理并回填，
 -- 不把历史数据误判为冲突。新写入一律带 64 位 SHA-256。
+--
+-- 不加 AFTER 位置子句：MySQL < 8.0.29 只支持「表尾 INSTANT ADD COLUMN」，
+-- 指定位置会退化成整表 rebuild。这两张表被三个消费组持续写入，重建期间的
+-- IO 与复制延迟会直接影响计费落库；列顺序不被任何 SQL 依赖。
 -- =====================================================================
 
 SET @ddl = (
@@ -21,7 +25,7 @@ SET @ddl = (
            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'processed_event'
              AND COLUMN_NAME = 'payload_hash'),
     'SELECT 1',
-    'ALTER TABLE processed_event ADD COLUMN payload_hash CHAR(64) NULL COMMENT ''规范化载荷 SHA-256，用于识别同 eventId 不同载荷'' AFTER grp'
+    'ALTER TABLE processed_event ADD COLUMN payload_hash CHAR(64) NULL COMMENT ''规范化载荷 SHA-256，用于识别同 eventId 不同载荷'''
   )
 );
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
@@ -32,7 +36,7 @@ SET @ddl = (
            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'billing_event'
              AND COLUMN_NAME = 'payload_hash'),
     'SELECT 1',
-    'ALTER TABLE billing_event ADD COLUMN payload_hash CHAR(64) NULL COMMENT ''规范化载荷 SHA-256，用于拒绝迟到重放改写金额'' AFTER ts'
+    'ALTER TABLE billing_event ADD COLUMN payload_hash CHAR(64) NULL COMMENT ''规范化载荷 SHA-256，用于拒绝迟到重放改写金额'''
   )
 );
 PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;

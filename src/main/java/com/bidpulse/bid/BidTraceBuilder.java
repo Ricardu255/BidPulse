@@ -48,11 +48,14 @@ final class BidTraceBuilder {
         steps.add(new BidTrace.Step("检索", "命中候选 " + count + " 条", costMs));
     }
 
+    /**
+     * 记录定向过滤后的条数。
+     *
+     * <p>定向条件已下推到 SQL 的 WHERE/JOIN（见 {@code BidService} ②），调用方传入的
+     * 就是检索结果本身，两个计数恒等；原先的「过滤」步骤永远不会被记到，已删除。
+     */
     void matched(int count) {
         this.matchCnt = count;
-        if (count != candidateCnt) {
-            steps.add(new BidTrace.Step("过滤", "定向过滤后 " + count + " 条", 0));
-        }
     }
 
     void warmed(int count) {
@@ -79,8 +82,12 @@ final class BidTraceBuilder {
         this.payPrice = payPrice;
         this.priceMode = priceMode;
         this.redisMs = billMs;
-        // 胜出候选也进列表：前端看到的「候选裁决」才是完整的，不会只有失败者
-        candidate(adId, winBid, payPrice, "SUCCESS");
+        // 胜出候选无论是否超出上限都必须进列表：否则轨迹里只有失败者，而结果里却有成交价，
+        // 前端看到的「候选裁决」与「本次成交价」自相矛盾。超上限时挤掉最后一条失败记录。
+        if (candidates.size() >= MAX_CANDIDATES) {
+            candidates.remove(candidates.size() - 1);
+        }
+        candidates.add(new BidTrace.Candidate(adId, winBid, payPrice, "SUCCESS"));
         String mode = priceMode == 1 ? "二价" : "一价";
         steps.add(new BidTrace.Step("成交",
                 mode + "成交 " + payPrice + " 元（胜出价 " + winBid + "）", billMs));
@@ -89,6 +96,8 @@ final class BidTraceBuilder {
     void fallback(String reason, int billMs) {
         this.outcome = "FALLBACK";
         this.fallbackReason = reason;
+        // 与 Result.priceMode 口径一致：0 一价 / 1 二价 / 2 兜底（兜底不计费，不能用默认 0）
+        this.priceMode = 2;
         this.redisMs = billMs;
         steps.add(new BidTrace.Step("兜底", "返回兜底广告：" + reason, billMs));
     }
@@ -96,6 +105,8 @@ final class BidTraceBuilder {
     void empty(String reason, int billMs) {
         this.outcome = "EMPTY";
         this.fallbackReason = reason;
+        // 空广告与兜底同属「非竞价成交」，Result 侧同样填 2，轨迹保持一致
+        this.priceMode = 2;
         this.redisMs = billMs;
         steps.add(new BidTrace.Step("空广告", "未返回广告：" + reason, billMs));
     }

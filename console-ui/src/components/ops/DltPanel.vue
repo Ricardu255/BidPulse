@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import FilterBar from '@/components/FilterBar.vue'
 import { getDltMessages, replayDlt, replayDltOne } from '@/api/console'
+import { idempotencyKey } from '@/api/idempotency'
 import type { DltMessageView, DltReplayStats } from '@/api/types'
 import { errorText } from '@/format'
 import { hasRole } from '@/auth'
@@ -15,6 +16,12 @@ const replayMax = ref(100)
 const replaying = ref(false)
 const replayingOne = ref<string | null>(null)
 const lastReplay = ref<DltReplayStats | null>(null)
+
+// 一次「用户意图」一个幂等键：重放失败后用户再点，服务端能把重复执行吸收掉；
+// 只有成功之后才 reset，下一次点击才算新的意图。
+const replayKey = idempotencyKey()
+const replayOneKey = idempotencyKey()
+let replayOneOwner = ''
 
 function notifyError(e: unknown): void {
   ElMessage({ message: errorText(e), type: 'error', grouping: true })
@@ -51,7 +58,8 @@ async function triggerReplay(): Promise<void> {
       { type: 'warning', confirmButtonText: '开始重放', cancelButtonText: '取消' },
     )
     replaying.value = true
-    lastReplay.value = await replayDlt(replayMax.value)
+    lastReplay.value = await replayDlt(replayMax.value, replayKey.current())
+    replayKey.reset()
     ElMessage.success(
       `重放完成：成功 ${lastReplay.value.replayed} 条，跳过不可解析 ${lastReplay.value.skippedInvalid} 条，超限 ${lastReplay.value.skippedExhausted} 条`,
     )
@@ -65,15 +73,21 @@ async function triggerReplay(): Promise<void> {
 }
 
 async function replayOne(row: DltMessageView): Promise<void> {
-  const key = `${row.partition}:${row.offset}`
+  const marker = `${row.partition}:${row.offset}`
   try {
     await ElMessageBox.confirm(
       `重放第 ${row.partition} 分区、第 ${row.offset} 条位点？原失败消息会保留，重复消费由幂等记录吸收。`,
       '单条重放',
       { type: 'warning', confirmButtonText: '重放', cancelButtonText: '取消' },
     )
-    replayingOne.value = key
-    const result = await replayDltOne(row.partition, row.offset)
+    replayingOne.value = marker
+    // 键按「分区:位点」隔离：换一条消息就是新意图，同一条消息重试则复用。
+    if (marker !== replayOneOwner) {
+      replayOneKey.reset()
+      replayOneOwner = marker
+    }
+    const result = await replayDltOne(row.partition, row.offset, replayOneKey.current())
+    replayOneKey.reset()
     ElMessage.success(`单条重放结果：${outcomeLabel(result.outcome)}`)
     await refreshDlt()
   } catch (e) {

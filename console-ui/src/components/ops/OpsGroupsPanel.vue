@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import FilterBar from '@/components/FilterBar.vue'
 import StaleNotice from '@/components/StaleNotice.vue'
 import { getKafkaGroups, pauseConsumers, resumeConsumers } from '@/api/console'
+import { idempotencyKey } from '@/api/idempotency'
 import type { KafkaGroupView, KafkaPartitionView } from '@/api/types'
 import { errorText } from '@/format'
 import { usePolling } from '@/composables/usePolling'
@@ -15,6 +16,10 @@ const canWrite = hasRole('OPERATOR', 'ADMIN')
 const groups = ref<KafkaGroupView[]>([])
 const loading = ref(false)
 const auto = ref(true)
+
+// 暂停/恢复各自一个意图键：失败后重按复用同一个键，成功后才换新。
+const pauseKey = idempotencyKey()
+const resumeKey = idempotencyKey()
 
 const partitions = ref<Array<KafkaPartitionView & { group: string }>>([])
 
@@ -58,7 +63,8 @@ async function pause(): Promise<void> {
       confirmButtonText: '暂停',
       cancelButtonText: '取消',
     })
-    await pauseConsumers()
+    await pauseConsumers(pauseKey.current())
+    pauseKey.reset()
     ElMessage.success('已暂停全部消费组')
     await refreshGroups()
   } catch (e) {
@@ -69,7 +75,8 @@ async function pause(): Promise<void> {
 
 async function resume(): Promise<void> {
   try {
-    await resumeConsumers()
+    await resumeConsumers(resumeKey.current())
+    resumeKey.reset()
     ElMessage.success('已恢复全部消费组')
     await refreshGroups()
   } catch (e) {

@@ -3,7 +3,7 @@
 .health-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 6px;
 }
 
 .health-chip {
@@ -11,11 +11,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--bp-line);
-  border-radius: 11px;
+  border-radius: 6px;
   background: var(--bp-panel-soft);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .health-name {
@@ -49,9 +49,13 @@
   width: 100%;
   max-width: 34px;
   min-height: 4px;
-  border-radius: 6px 6px 2px 2px;
+  border-radius: 2px 2px 0 0;
   background: var(--bp-accent);
-  transition: height 0.25s ease;
+  transition: height 0.2s ease;
+}
+
+.trend-bar.zero {
+  background: #d9dde0;
 }
 
 .trend-label {
@@ -171,7 +175,8 @@
 }
 
 .recon-time {
-  font-size: 16px !important;
+  font-size: 15px !important;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- 广告列表 / 抽屉 ---------- */
@@ -190,7 +195,8 @@
 
 .drawer-section {
   margin: 18px 0 8px;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--bp-ink-soft);
 }
 
@@ -208,7 +214,7 @@
 .experiment-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .experiment-item {
@@ -218,13 +224,14 @@
   gap: 16px;
   padding: 14px 16px;
   border: 1px solid var(--bp-line);
-  border-radius: 13px;
+  border-radius: 6px;
   background: var(--bp-panel-soft);
 }
 
 .experiment-item strong {
   color: var(--bp-ink);
   font-size: 14px;
+  font-weight: 500;
 }
 
 .experiment-item .hint {
@@ -247,9 +254,9 @@
 .dlt-label {
   margin: 8px 0 4px;
   color: var(--bp-muted);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .dlt-value {
@@ -258,8 +265,8 @@
   overflow: auto;
   padding: 10px 12px;
   border: 1px solid var(--bp-line);
-  border-radius: 9px;
-  background: #f7fbfd;
+  border-radius: 6px;
+  background: var(--bp-panel-soft);
   color: var(--bp-ink-soft);
   font-family: Consolas, "SFMono-Regular", monospace;
   font-size: 12px;
@@ -280,170 +287,15 @@
   white-space: nowrap;
 }
 
-.login-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  min-height: 100vh;
-  padding: 24px;
-}
-
-.login-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.login-brand strong {
-  display: block;
-  color: var(--bp-ink);
-  font-size: 20px;
-  letter-spacing: 0.03em;
-}
-
-.login-brand small {
-  display: block;
-  margin-top: 2px;
-  color: var(--bp-muted);
-  font-size: 12px;
-}
-
-.login-card {
-  width: min(420px, calc(100vw - 32px));
-  border: 1px solid var(--bp-line);
-  border-radius: 18px;
-  background: var(--bp-panel);
-  box-shadow: var(--bp-shadow);
-}
-
-.login-card h2 {
-  margin: 0 0 8px;
-  color: var(--bp-ink);
-  font-size: 22px;
-}
-
-.login-sub {
-  margin: 0 0 22px;
-  color: var(--bp-muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.login-error {
-  margin-bottom: 14px;
-}
-
-.login-submit {
-  width: 100%;
-}
-
-.login-hint {
-  margin-top: 22px;
-  padding: 12px 14px;
-  border: 1px dashed var(--bp-line-strong);
-  border-radius: 11px;
-  background: var(--bp-panel-soft);
-  color: var(--bp-muted);
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.login-hint strong {
-  color: var(--bp-ink-soft);
-}
-
-.login-hint p {
-  margin: 5px 0 0;
-}
-
-.login-hint code {
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--bp-primary-soft);
-  color: var(--bp-primary-deep);
-  font-size: 11px;
-}
+/* 登录页的样式统一在文件下方「Login: two-column editorial sheet」一节，
+   这里不再重复定义旧版的单列布局。 */
 
 /* =========================================================
-   Framed-sheet refinements (kept last so page rules resolve)
+   与上面各节合并后的补充选择器（不再重复声明已有类）
    ========================================================= */
-.health-strip {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.health-chip {
-  padding: 8px 10px;
-  border-color: var(--bp-line);
-  border-radius: 6px;
-  background: var(--bp-panel-soft);
-  font-size: 12px;
-}
-
-.trend-bar {
-  border-radius: 2px 2px 0 0;
-  background: var(--bp-accent);
-  transition: height 0.2s ease;
-}
-
-.trend-bar.zero {
-  background: #d9dde0;
-}
-
 .legend-dot.win { background: var(--bp-accent); }
 .legend-dot.fallback { background: var(--bp-chart-3); }
 .legend-dot.empty { background: #c6cdd1; }
-
-.experiment-grid {
-  gap: 12px;
-}
-
-.experiment-item {
-  padding: 14px 16px;
-  border-color: var(--bp-line);
-  border-radius: 6px;
-  background: var(--bp-panel-soft);
-}
-
-.experiment-item strong {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dlt-label {
-  margin: 8px 0 4px;
-  color: var(--bp-muted);
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.dlt-value {
-  padding: 10px 12px;
-  border-color: var(--bp-line);
-  border-radius: 6px;
-  background: var(--bp-panel-soft);
-  color: var(--bp-ink-soft);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.recon-time {
-  font-size: 15px !important;
-  font-variant-numeric: tabular-nums;
-}
-
-.drawer-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.drawer-section {
-  font-size: 13px;
-  font-weight: 500;
-}
 
 /* ---------- Login: two-column editorial sheet ---------- */
 .login-page {
@@ -471,6 +323,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 原来写在 LoginView 的 style= 上；抽出来才能被媒体查询和主题覆盖。 */
+.login-intro-body {
+  margin-top: clamp(42px, 9vh, 96px);
 }
 
 .login-brand strong {
@@ -590,6 +447,14 @@
   color: var(--bp-ink-soft);
 }
 
+.login-hint strong {
+  color: var(--bp-ink-soft);
+}
+
+.login-hint p {
+  margin: 5px 0 0;
+}
+
 @media (max-width: 900px) {
   .login-page {
     display: block;
@@ -613,8 +478,9 @@
   }
 
   .login-card {
+    /* 竖排时保留上边框：上下两块的圆角都去掉了，再删掉这条线，
+       简介区和登录卡之间就完全没有分隔。 */
     border-radius: 0;
-    border-top: 0;
   }
 }
 
@@ -629,6 +495,11 @@
 .login-card .el-card__body {
   width: 100%;
   padding: 0;
+}
+
+/* v-loading 的遮罩需要容器有高度，否则轨迹还在加载时弹窗里是一片空白 */
+.trace-dialog-body {
+  min-height: 240px;
 }
 
 /* Mobile recent-bid rows: keep the result and price visible without horizontal scroll */

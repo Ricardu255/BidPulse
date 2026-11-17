@@ -129,7 +129,9 @@ public class DataSourceConfig {
         TransactionTemplate template = new TransactionTemplate(txManager);
         template.setReadOnly(true);
         template.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
-        template.setTimeout(props.getConsole().getReadDb().getQueryTimeoutSeconds());
+        // query-timeout-seconds 是「单条语句」预算（默认 2s），而一笔快照要连跑 5 条聚合语句；
+        // 直接复用会让整笔快照在 2s 被回滚，哪怕每条语句都在各自预算内。
+        template.setTimeout(Math.max(1, props.getConsole().getReadDb().getQueryTimeoutSeconds() * 5));
         return template;
     }
 }
